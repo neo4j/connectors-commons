@@ -31,7 +31,12 @@ class Build(
                     "-DspotlessFiles=src/main/java/.*.java",
                     java))
             dependentBuildType(
-                Maven("${name}-test", "test", "verify", javaVersion = java, size = LinuxSize.LARGE))
+                Maven(
+                    "${name}-test-${java}",
+                    "test - java ${java}",
+                    "verify",
+                    javaVersion = java,
+                    size = LinuxSize.LARGE))
           }
         }
         dependentBuildType(complete)
