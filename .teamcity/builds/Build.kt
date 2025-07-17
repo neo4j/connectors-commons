@@ -23,20 +23,22 @@ class Build(
         if (forPullRequests) dependentBuildType(PRCheck("${name}-pr-check", "pr check"))
         parallel {
           listOf("11", "17", "21").forEach { java ->
-            dependentBuildType(
-                Maven(
-                    "${name}-build-${java}",
-                    "build - java ${java}",
-                    "sortpom:verify license:check spotless:check compile",
-                    "-DspotlessFiles=src/main/java/.*.java",
-                    java))
-            dependentBuildType(
-                Maven(
-                    "${name}-test-${java}",
-                    "test - java ${java}",
-                    "verify",
-                    javaVersion = java,
-                    size = LinuxSize.LARGE))
+            sequential {
+              dependentBuildType(
+                  Maven(
+                      "${name}-build-${java}",
+                      "build - java ${java}",
+                      "sortpom:verify license:check spotless:check compile",
+                      "-DspotlessFiles=src/main/java/.*.java",
+                      java))
+              dependentBuildType(
+                  Maven(
+                      "${name}-test-${java}",
+                      "test - java ${java}",
+                      "verify",
+                      javaVersion = java,
+                      size = LinuxSize.LARGE))
+            }
           }
         }
         dependentBuildType(complete)
