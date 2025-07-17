@@ -1,0 +1,2 @@
+./mvnw sortpom:sort spotless:apply
+./mvnw spotless:apply -f .teamcity/pom.xml
