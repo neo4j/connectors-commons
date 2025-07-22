@@ -41,6 +41,9 @@
     <properties>
         <assertj-core.version>3.27.3</assertj-core.version>
         <junit-bom.version>5.13.4</junit-bom.version>
+        <jackson.version>2.19.2</jackson.version>
+        <jboss-logging.version>3.6.1.Final</jboss-logging.version>
+        <keycloak-authz-client.version>26.0.6</keycloak-authz-client.version>
         <license.id>neo4j_apache_v2</license.id>
         <maven.compiler.release>11</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -48,6 +51,13 @@
     </properties>
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
@@ -66,6 +76,16 @@
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.logging</groupId>
+                <artifactId>jboss-logging</artifactId>
+                <version>${jboss-logging.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.keycloak</groupId>
+                <artifactId>keycloak-authz-client</artifactId>
+                <version>${keycloak-authz-client.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

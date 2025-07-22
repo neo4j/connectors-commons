@@ -11,4 +11,19 @@
     <artifactId>authn</artifactId>
     <name>authn</name>
     <description>Pluggable authentication provider(s) for connectors</description>
+    <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.jr</groupId>
+            <artifactId>jackson-jr-objects</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-authz-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-jdbc-authn-spi</artifactId>
+            <version>6.7.2</version>
+        </dependency>
+    </dependencies>
 </project>
