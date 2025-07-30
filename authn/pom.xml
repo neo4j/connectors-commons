@@ -11,4 +11,10 @@
     <artifactId>authn</artifactId>
     <name>authn</name>
     <description>Pluggable authentication provider(s) for connectors</description>
+    <dependencies>
+        <dependency>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-authz-client</artifactId>
+        </dependency>
+    </dependencies>
 </project>
