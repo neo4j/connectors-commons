@@ -43,11 +43,13 @@
         <jackson.version>2.19.2</jackson.version>
         <jboss-logging.version>3.6.1.Final</jboss-logging.version>
         <junit-bom.version>5.13.4</junit-bom.version>
+        <junit4.version/>
         <keycloak.version>26.0.6</keycloak.version>
         <license.id>neo4j_apache_v2</license.id>
         <maven.compiler.release>11</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <testcontainers-bom.version>1.21.3</testcontainers-bom.version>
+        <testcontainers-keycloak.version>3.8.0</testcontainers-keycloak.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -71,6 +73,20 @@
                 <version>${testcontainers-bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.github.dasniko</groupId>
+                <artifactId>testcontainers-keycloak</artifactId>
+                <version>${testcontainers-keycloak.version}</version>
+            </dependency>
+            <!--
+                Required for com.github.dasniko:testcontainers-keycloak.
+                Version 3.6.9 is a minimal version supporting JDK 11.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-junit4-mock</artifactId>
+                <version>3.6.9</version>
             </dependency>
             <dependency>
                 <groupId>org.assertj</groupId>
