@@ -18,13 +18,13 @@ package org.neo4j.connectors.authn;
 
 import java.util.Objects;
 
-public class CredentialsAuthenticationToken implements AuthenticationToken {
+public class UserNameAndPasswordAuthenticationToken implements AuthenticationToken {
     private static final String SCHEME = "basic";
     private final String username;
     private final String password;
     private final String realm;
 
-    public CredentialsAuthenticationToken(String username, String password, String realm) {
+    public UserNameAndPasswordAuthenticationToken(String username, String password, String realm) {
         this.username = Objects.requireNonNull(username);
         this.password = Objects.requireNonNull(password);
         this.realm = realm;

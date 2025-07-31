@@ -29,19 +29,19 @@ public interface AuthenticationToken {
         return new BearerAuthenticationToken(token, expiresAt);
     }
 
-    static AuthenticationToken credentials(String username, String password) {
-        return credentials(username, password, null);
-    }
-
-    static AuthenticationToken credentials(String username, String password, String realm) {
-        return new CredentialsAuthenticationToken(username, password, realm);
-    }
-
     static AuthenticationToken kerberos(String token) {
         return new KerberosAuthenticationToken(token);
     }
 
     static AuthenticationToken none() {
         return DisabledAuthenticationToken.NONE;
+    }
+
+    static AuthenticationToken usernameAndPassword(String username, String password) {
+        return usernameAndPassword(username, password, null);
+    }
+
+    static AuthenticationToken usernameAndPassword(String username, String password, String realm) {
+        return new UserNameAndPasswordAuthenticationToken(username, password, realm);
     }
 }
