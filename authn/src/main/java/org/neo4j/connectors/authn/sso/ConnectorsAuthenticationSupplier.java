@@ -18,6 +18,7 @@ package org.neo4j.connectors.authn.sso;
 
 import com.fasterxml.jackson.jr.ob.JSON;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
@@ -63,7 +64,44 @@ public class ConnectorsAuthenticationSupplier implements Supplier<Authentication
 
     @Override
     public AuthenticationToken get() {
-        return null;
+        BearerAuthenticationTokenAndTime freshToken = this.token.updateAndGet(this::get0);
+        return freshToken.toAuthenticationToken();
+    }
+
+    private BearerAuthenticationTokenAndTime get0(BearerAuthenticationTokenAndTime previous) {
+        if (previous == null) {
+            return fetch();
+        } else {
+            return refresh(previous.refreshToken);
+        }
+    }
+
+    private BearerAuthenticationTokenAndTime fetch() {
+        try {
+            AccessTokenResponse response = this.client.obtainAccessToken(this.username, this.password);
+            return BearerAuthenticationTokenAndTime.of(response);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private BearerAuthenticationTokenAndTime refresh(String refreshToken) {
+        try {
+            AccessTokenResponse response = this.http.<AccessTokenResponse>post(this.url)
+                .authentication()
+                .client()
+                .form()
+                .param("grant_type", "refresh_token")
+                .param("refresh_token", refreshToken)
+                .param("client_id", this.config.getResource())
+                .param("client_secret", (String) this.config.getCredentials().get("secret"))
+                .response()
+                .json(AccessTokenResponse.class)
+                .execute();
+            return BearerAuthenticationTokenAndTime.of(response);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
