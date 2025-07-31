@@ -16,10 +16,17 @@
  */
 package org.neo4j.connectors.authn.sso;
 
+import com.fasterxml.jackson.jr.ob.JSON;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.keycloak.authorization.client.AuthzClient;
 import org.keycloak.authorization.client.Configuration;
 import org.keycloak.authorization.client.util.Http;
+import org.keycloak.representations.AccessTokenResponse;
 import org.neo4j.connectors.authn.AuthenticationToken;
 
 /**
@@ -32,6 +39,7 @@ public class ConnectorsAuthenticationSupplier implements Supplier<Authentication
     private final AuthzClient client;
     private final Http http;
     private final String url;
+    private final AtomicReference<BearerAuthenticationTokenAndTime> token = new AtomicReference<>();
 
     ConnectorsAuthenticationSupplier(String username, String password, Configuration config) {
         this.username = username;
@@ -42,12 +50,53 @@ public class ConnectorsAuthenticationSupplier implements Supplier<Authentication
         this.http = new Http(config, config.getClientCredentialsProvider());
     }
 
-    private String constructUrl(Configuration c) {
-        return c.getAuthServerUrl() + "/realms/" + c.getRealm() + "/protocol/openid-connect/token";
+    private String constructUrl(Configuration config) {
+        return config.getAuthServerUrl() + "/realms/" + config.getRealm() + "/protocol/openid-connect/token";
+    }
+
+    /**
+     * @return true if a token has been retrieved and it is expired
+     */
+    public boolean currentTokenIsExpired() {
+        return token.get() == null || token.get().expireAt.isBefore(Instant.now());
     }
 
     @Override
     public AuthenticationToken get() {
         return null;
+    }
+
+    /**
+     * Couples together a bearer token, with an expiration date, with a refresh token.
+     * Internal helper class to help the supplier.
+     */
+    private static final class BearerAuthenticationTokenAndTime {
+        static final Base64.Decoder DECODER = Base64.getDecoder();
+        private final String token;
+        private final Instant expireAt;
+        private final String refreshToken;
+
+        public BearerAuthenticationTokenAndTime(String token, Instant expireAt, String refreshToken) {
+            this.token = token;
+            this.expireAt = expireAt;
+            this.refreshToken = refreshToken;
+        }
+
+        /**
+         * Decodes an incoming AccessTokenResponse from the SSO server, then creates a new token based on it.
+         */
+        static BearerAuthenticationTokenAndTime of(AccessTokenResponse accessTokenResponse) throws IOException {
+            String token = accessTokenResponse.getToken();
+            String[] chunks = token.split("\\.");
+            Map<String, Object> payload = JSON.std.mapFrom(DECODER.decode(chunks[1]));
+            long epoch = ((Number) payload.get("exp")).longValue();
+            Instant expireAt = Instant.ofEpochSecond(epoch);
+
+            return new BearerAuthenticationTokenAndTime(token, expireAt, accessTokenResponse.getRefreshToken());
+        }
+
+        AuthenticationToken toAuthenticationToken() {
+            return AuthenticationToken.bearer(token, expireAt);
+        }
     }
 }
