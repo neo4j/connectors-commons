@@ -33,7 +33,7 @@ import org.neo4j.connectors.authn.AuthenticationToken;
 /**
  * This supplier uses OAth2 resource owner flow via the Keycloak client.
  */
-public class ConnectorsAuthenticationSupplier implements Supplier<AuthenticationToken> {
+public class KeycloakOIDCAuthenticationSupplier implements Supplier<AuthenticationToken> {
     private final String username;
     private final String password;
     private final Configuration config;
@@ -42,7 +42,7 @@ public class ConnectorsAuthenticationSupplier implements Supplier<Authentication
     private final String url;
     private final AtomicReference<BearerAuthenticationTokenAndTime> token = new AtomicReference<>();
 
-    ConnectorsAuthenticationSupplier(String username, String password, Configuration config) {
+    KeycloakOIDCAuthenticationSupplier(String username, String password, Configuration config) {
         this.username = username;
         this.password = password;
         this.config = config;
