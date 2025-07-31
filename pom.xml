@@ -40,14 +40,19 @@
     </scm>
     <properties>
         <assertj-core.version>3.27.3</assertj-core.version>
+        <awaitility.version>4.3.0</awaitility.version>
         <jackson.version>2.19.2</jackson.version>
         <jboss-logging.version>3.6.1.Final</jboss-logging.version>
         <junit-bom.version>5.13.4</junit-bom.version>
         <keycloak.version>26.0.6</keycloak.version>
         <license.id>neo4j_apache_v2</license.id>
         <maven.compiler.release>11</maven.compiler.release>
+        <micrometer.version>1.15.2</micrometer.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <slf4j.version>2.0.17</slf4j.version>
+        <system-lambda.version>1.2.1</system-lambda.version>
         <testcontainers-bom.version>1.21.3</testcontainers-bom.version>
+        <testcontainers-keycloak.version>3.8.0</testcontainers-keycloak.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -59,9 +64,23 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-bom</artifactId>
+                <version>${micrometer.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
                 <version>${junit-bom.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-bom</artifactId>
+                <version>${slf4j.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -73,9 +92,24 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>com.github.dasniko</groupId>
+                <artifactId>testcontainers-keycloak</artifactId>
+                <version>${testcontainers-keycloak.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.stefanbirkner</groupId>
+                <artifactId>system-lambda</artifactId>
+                <version>${system-lambda.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>${awaitility.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.jboss.logging</groupId>
