@@ -87,6 +87,11 @@
                 <artifactId>keycloak-authz-client</artifactId>
                 <version>${keycloak.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.neo4j.connectors</groupId>
+                <artifactId>commons-authn-spi</artifactId>
+                <version>${version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     <build>

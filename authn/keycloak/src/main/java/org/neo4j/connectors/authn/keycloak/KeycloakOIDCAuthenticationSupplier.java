@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.neo4j.connectors.authn.sso;
+package org.neo4j.connectors.authn.keycloak;
 
 import com.fasterxml.jackson.jr.ob.JSON;
 import java.io.IOException;
