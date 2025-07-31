@@ -11,6 +11,10 @@
     <artifactId>authn</artifactId>
     <name>authn</name>
     <description>Pluggable authentication provider(s) for connectors</description>
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.fasterxml.jackson.jr</groupId>
