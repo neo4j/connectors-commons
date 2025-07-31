@@ -87,17 +87,19 @@ public class ConnectorsAuthenticationSupplier implements Supplier<Authentication
 
     private BearerAuthenticationTokenAndTime refresh(String refreshToken) {
         try {
-            AccessTokenResponse response = this.http.<AccessTokenResponse>post(this.url)
-                .authentication()
-                .client()
-                .form()
-                .param("grant_type", "refresh_token")
-                .param("refresh_token", refreshToken)
-                .param("client_id", this.config.getResource())
-                .param("client_secret", (String) this.config.getCredentials().get("secret"))
-                .response()
-                .json(AccessTokenResponse.class)
-                .execute();
+            AccessTokenResponse response = this.http
+                    .<AccessTokenResponse>post(this.url)
+                    .authentication()
+                    .client()
+                    .form()
+                    .param("grant_type", "refresh_token")
+                    .param("refresh_token", refreshToken)
+                    .param("client_id", this.config.getResource())
+                    .param("client_secret", (String)
+                            this.config.getCredentials().get("secret"))
+                    .response()
+                    .json(AccessTokenResponse.class)
+                    .execute();
             return BearerAuthenticationTokenAndTime.of(response);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
