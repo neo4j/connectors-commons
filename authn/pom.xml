@@ -8,7 +8,16 @@
         <version>1.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <artifactId>authn</artifactId>
-    <name>authn</name>
+    <artifactId>commons-authn</artifactId>
+    <packaging>pom</packaging>
+    <name>commons-authn</name>
     <description>Pluggable authentication provider(s) for connectors</description>
+    <modules>
+        <module>spi</module>
+        <module>keycloak</module>
+    </modules>
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
 </project>
