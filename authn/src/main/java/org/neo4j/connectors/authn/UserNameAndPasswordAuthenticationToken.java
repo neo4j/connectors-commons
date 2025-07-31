@@ -19,7 +19,6 @@ package org.neo4j.connectors.authn;
 import java.util.Objects;
 
 public class UserNameAndPasswordAuthenticationToken implements AuthenticationToken {
-    private static final String SCHEME = "basic";
     private final String username;
     private final String password;
     private final String realm;
@@ -28,11 +27,6 @@ public class UserNameAndPasswordAuthenticationToken implements AuthenticationTok
         this.username = Objects.requireNonNull(username);
         this.password = Objects.requireNonNull(password);
         this.realm = realm;
-    }
-
-    @Override
-    public String getScheme() {
-        return SCHEME;
     }
 
     public String getUsername() {

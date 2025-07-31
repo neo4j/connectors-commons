@@ -19,7 +19,6 @@ package org.neo4j.connectors.authn;
 import java.time.Instant;
 
 public class BearerAuthenticationToken implements ExpiringAuthenticationToken {
-    private static final String SCHEME = "bearer";
     private final String token;
     private final Instant expiresAt;
 
@@ -28,17 +27,8 @@ public class BearerAuthenticationToken implements ExpiringAuthenticationToken {
         this.expiresAt = expiresAt;
     }
 
-    public String getToken() {
-        return token;
-    }
-
     @Override
     public Instant getExpiresAt() {
         return expiresAt;
-    }
-
-    @Override
-    public String getScheme() {
-        return SCHEME;
     }
 }

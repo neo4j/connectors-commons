@@ -18,11 +18,4 @@ package org.neo4j.connectors.authn;
 
 public enum DisabledAuthenticationToken implements AuthenticationToken {
     NONE;
-
-    private static final String SCHEME = "none";
-
-    @Override
-    public String getScheme() {
-        return SCHEME;
-    }
 }

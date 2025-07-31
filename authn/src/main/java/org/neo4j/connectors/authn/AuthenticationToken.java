@@ -19,8 +19,6 @@ package org.neo4j.connectors.authn;
 import java.time.Instant;
 
 public interface AuthenticationToken {
-    String getScheme();
-
     static AuthenticationToken bearer(String token) {
         return bearer(token, null);
     }
@@ -30,7 +28,7 @@ public interface AuthenticationToken {
     }
 
     static AuthenticationToken kerberos(String token) {
-        return new KerberosAuthenticationToken(token);
+        return new BearerAuthenticationToken(token, null);
     }
 
     static AuthenticationToken none() {
