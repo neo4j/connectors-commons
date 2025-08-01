@@ -16,27 +16,40 @@
  */
 package org.neo4j.connectors.common.driver.reauth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dasniko.testcontainers.keycloak.KeycloakContainer;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
-
+import java.util.stream.Stream;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
 import org.neo4j.connectors.common.driver.reauth.tmp.KCAuthenticationSupplier;
 import org.neo4j.connectors.common.driver.reauth.tmp.TokenAuthentication;
 import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
+import org.neo4j.driver.reactive.RxSession;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.shaded.org.awaitility.Awaitility;
 import org.testcontainers.utility.MountableFile;
+import reactor.core.publisher.Mono;
 
 @Testcontainers(disabledWithoutDocker = true)
 public class ReAuthDriverIT {
+
+    private static final Duration TOKEN_LIFESPAN_GUARANTEED = Duration.ofSeconds(4);
 
     private static final Network NETWORK = Network.newNetwork();
 
@@ -77,7 +90,7 @@ public class ReAuthDriverIT {
             .withNeo4jConfig("dbms.security.oidc.keycloak.client_id", "neo4j-commons-client")
             .withNeo4jConfig("dbms.security.oidc.keycloak.claims.username", "preferred_username")
             .withNeo4jConfig("dbms.security.oidc.keycloak.claims.groups", "groups")
-            .withNeo4jConfig("dbms.security.auth_cache_ttl", "5s")
+            .withNeo4jConfig("dbms.security.auth_cache_ttl", "1s")
             .withLogConsumer(outputFrame -> System.out.print(outputFrame.getUtf8String()));
 
     private static KCAuthenticationSupplier authenticationSupplier;
@@ -97,14 +110,63 @@ public class ReAuthDriverIT {
                 (KCAuthenticationSupplier) KCAuthenticationSupplier.of("john-tester", "testerpwd", authzConfiguration);
     }
 
-    @Test
-    void reAuthDriverReturnsSessionWithRefreshedToken() {
+    static Stream<Arguments> expiringMethods() {
+        var builder = Stream.<Arguments>builder();
+
+        Consumer<Driver> sessionFunc = (Driver driver) -> {
+            try (var session = driver.session()) {
+                var params = Map.<String, Object>of("ts", System.currentTimeMillis());
+                session.writeTransaction(tx ->
+                        tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params).consume());
+            }
+        };
+        builder.add(Arguments.argumentSet("session", sessionFunc));
+
+        Consumer<Driver> rxSessionFunc = (Driver driver) -> {
+            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
+            Mono.usingWhen(
+                            Mono.just(driver.rxSession()),
+                            rxSession -> Mono.fromDirect(rxSession.writeTransaction(
+                                    tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+                                            .consume())),
+                            RxSession::close)
+                    .block();
+        };
+        builder.add(Arguments.argumentSet("rxSession", rxSessionFunc));
+
+        Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
+            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
+            var asyncSession = driver.asyncSession();
+            asyncSession
+                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {ts: $ts}) RETURN t.ts", params))
+                    .whenComplete((result, error) -> asyncSession.closeAsync())
+                    .toCompletableFuture()
+                    .join();
+        };
+        builder.add(Arguments.argumentSet("asyncSession", sessionAsyncFunc));
+
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource("expiringMethods")
+    void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) {
+        var createdDrivers = new CopyOnWriteArrayList<Driver>();
         Supplier<ExpiringDriver> driverSupplier = () -> {
             var token = (TokenAuthentication) authenticationSupplier.get();
-            return new ExpiringDriver(GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getValue())), token.expiresAt());
+            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getValue()));
+            createdDrivers.add(driver);
+            return new ExpiringDriver(driver, token.expiresAt());
         };
+
         try (var driver = new ReAuthDriver(driverSupplier)) {
-            driver.verifyConnectivity();
+            func.accept(driver);
+            assertThat(createdDrivers).hasSize(1);
+
+            Awaitility.await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+
+            func.accept(driver);
+            assertThat(createdDrivers).hasSize(2);
         }
     }
 

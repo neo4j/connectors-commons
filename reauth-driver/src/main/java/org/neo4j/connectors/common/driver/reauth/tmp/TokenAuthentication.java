@@ -41,7 +41,7 @@ public class TokenAuthentication implements ExpiringAuthentication {
 
     @Override
     public Instant expiresAt() {
-        return null;
+        return expiresAt;
     }
 
     @Override

@@ -16,12 +16,9 @@
  */
 package org.neo4j.connectors.common.driver.reauth;
 
-import static java.util.function.Function.identity;
-
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -33,12 +30,12 @@ import org.neo4j.driver.types.TypeSystem;
 
 public class ReAuthDriver implements Driver {
 
-    private final static long DEFAULT_CLEANUP_INTERVAL_MILLIS = 5 * 60 * 1000L;
+    private static final long DEFAULT_CLEANUP_INTERVAL_MILLIS = 5 * 60 * 1000L;
 
     private final Supplier<ExpiringDriver> driverFactory;
 
     private ExpiringDriver currentDriver;
-    private final ReentrantReadWriteLock currentDriverMock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock currentDriverLock = new ReentrantReadWriteLock();
 
     private final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService cleanupExecutor;
@@ -95,7 +92,7 @@ public class ReAuthDriver implements Driver {
     public void close() {
         expiredDrivers.forEach(Driver::close);
         currentDriver.getDriver().close();
-        cleanupExecutor.shutdown();
+        cleanupExecutor.shutdownNow();
     }
 
     @Override
@@ -123,22 +120,22 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public void verifyConnectivity() {
-        checkExpiration(Driver::verifyConnectivity);
+        currentDriver.getDriver().verifyConnectivity();
     }
 
     @Override
     public CompletionStage<Void> verifyConnectivityAsync() {
-        return checkExpirationAsync(Driver::verifyConnectivityAsync);
+        return currentDriver.getDriver().verifyConnectivityAsync();
     }
 
     @Override
     public boolean supportsMultiDb() {
-        return checkExpiration(Driver::supportsMultiDb);
+        return currentDriver.getDriver().supportsMultiDb();
     }
 
     @Override
     public CompletionStage<Boolean> supportsMultiDbAsync() {
-        return checkExpirationAsync(Driver::supportsMultiDbAsync);
+        return currentDriver.getDriver().supportsMultiDbAsync();
     }
 
     private void cleanUpPreviousDrivers() {
@@ -148,33 +145,12 @@ public class ReAuthDriver implements Driver {
                     return connectionPoolMetrics.stream().allMatch(m -> m.inUse() == 0);
                 })
                 .collect(Collectors.toList());
+        expiredDrivers.forEach(Driver::close);
         expiredDrivers.removeAll(driverWithNoConnections);
     }
 
-    private <T> CompletionStage<T> checkExpirationAsync(Function<Driver, CompletionStage<T>> block) {
-        return block.apply(currentDriver.getDriver())
-                .handle((v, throwable) -> {
-                    if (throwable != null) {
-                        if (throwable instanceof TokenExpiredException) {
-                            rotateCurrentDriver(currentDriver.hashCode());
-                            return block.apply(currentDriver.getDriver());
-                        }
-                        return CompletableFuture.<T>failedFuture(throwable);
-                    }
-                    return CompletableFuture.completedFuture(v);
-                })
-                .thenCompose(identity());
-    }
-
-    private void checkExpiration(Consumer<Driver> block) {
-        checkExpiration((Driver driver) -> {
-            block.accept(driver);
-            return null;
-        });
-    }
-
     private <T> T checkExpiration(Function<Driver, T> block) {
-        currentDriverMock.readLock().lock();
+        currentDriverLock.readLock().lock();
         var latestDriverHashCode = currentDriver.getDriver().hashCode();
         if (currentDriver.isExpired()) {
             rotateCurrentDriver(latestDriverHashCode);
@@ -185,21 +161,22 @@ public class ReAuthDriver implements Driver {
             rotateCurrentDriver(latestDriverHashCode);
             return block.apply(currentDriver.getDriver());
         } finally {
-            currentDriverMock.readLock().unlock();
+            currentDriverLock.readLock().unlock();
         }
     }
 
     private void rotateCurrentDriver(int hashCode) {
-        currentDriverMock.readLock().unlock();
-        currentDriverMock.writeLock().lock();
+        currentDriverLock.readLock().unlock();
+        currentDriverLock.writeLock().lock();
         try {
+            // Verify hash code because current driver may be updated by another thread
             if (currentDriver.getDriver().hashCode() == hashCode) {
                 expiredDrivers.add(currentDriver.getDriver());
                 currentDriver = driverFactory.get();
             }
-            currentDriverMock.readLock().lock();
+            currentDriverLock.readLock().lock();
         } finally {
-            currentDriverMock.writeLock().unlock();
+            currentDriverLock.writeLock().unlock();
         }
     }
 }

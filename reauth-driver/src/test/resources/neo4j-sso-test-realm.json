@@ -762,7 +762,7 @@
       "frontchannelLogout": true,
       "protocol": "openid-connect",
       "attributes": {
-        "access.token.lifespan" : "10",
+        "access.token.lifespan" : "3",
         "client.secret.creation.time" : "1750236324",
         "request.object.signature.alg" : "any",
         "request.object.encryption.alg" : "any",
@@ -790,6 +790,23 @@
       "authenticationFlowBindingOverrides": {},
       "fullScopeAllowed": true,
       "nodeReRegistrationTimeout": -1,
+      "protocolMappers" : [ {
+        "id" : "ac56f3e2-8898-4040-a4ed-b1a4e3a20e52",
+        "name" : "groups",
+        "protocol" : "openid-connect",
+        "protocolMapper" : "oidc-group-membership-mapper",
+        "consentRequired" : false,
+        "config" : {
+          "full.path" : "false",
+          "introspection.token.claim" : "true",
+          "userinfo.token.claim" : "false",
+          "multivalued" : "true",
+          "id.token.claim" : "false",
+          "lightweight.claim" : "false",
+          "access.token.claim" : "true",
+          "claim.name" : "groups"
+        }
+      } ],
       "defaultClientScopes": [
         "service_account",
         "web-origins",
