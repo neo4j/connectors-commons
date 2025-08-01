@@ -18,6 +18,14 @@
     </properties>
     <dependencies>
         <dependency>
+            <groupId>org.neo4j.connectors</groupId>
+            <artifactId>commons-authn-spi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j.connectors</groupId>
+            <artifactId>commons-authn-spi</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.neo4j.driver</groupId>
             <artifactId>neo4j-java-driver-slim</artifactId>
             <version>${neo4j-driver.version}</version>
@@ -45,11 +53,6 @@
         <dependency>
             <groupId>org.neo4j.connectors</groupId>
             <artifactId>commons-authn-keycloak</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.neo4j.connectors</groupId>
-            <artifactId>commons-authn-spi</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

@@ -20,7 +20,7 @@ import java.time.Instant;
 import java.util.Objects;
 import org.neo4j.driver.Driver;
 
-public class ExpiringDriver {
+class ExpiringDriver {
 
     private final Driver driver;
     private final Instant expiresAt;

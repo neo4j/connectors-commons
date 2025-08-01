@@ -18,18 +18,20 @@ package org.neo4j.connectors.authn.keycloak;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Supplier;
 import org.apache.http.impl.client.HttpClients;
 import org.keycloak.authorization.client.Configuration;
-import org.neo4j.connectors.authn.AuthenticationToken;
+import org.neo4j.connectors.authn.AuthenticationTokenSupplier;
 import org.neo4j.connectors.authn.AuthenticationTokenSupplierFactory;
+import org.neo4j.connectors.authn.BearerAuthenticationToken;
 
 /**
  * Use this factory to spawn a keycloak oidc configured sso client.
  */
-public class KeycloakOIDCAuthenticationSupplierFactory implements AuthenticationTokenSupplierFactory {
+public class KeycloakOIDCAuthenticationSupplierFactory
+        implements AuthenticationTokenSupplierFactory<BearerAuthenticationToken> {
     @Override
-    public Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters) {
+    public AuthenticationTokenSupplier<BearerAuthenticationToken> create(
+            String username, String password, Map<String, String> parameters) {
         // make sure parameters are passed
         var url = Objects.requireNonNull(parameters.get("authServerUrl"));
         var realm = Objects.requireNonNull(parameters.get("realm"));
