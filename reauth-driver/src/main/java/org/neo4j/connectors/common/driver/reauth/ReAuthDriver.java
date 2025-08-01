@@ -37,10 +37,10 @@ public class ReAuthDriver implements Driver {
 
     private final Supplier<ExpiringDriver> driverFactory;
 
-    private ExpiringDriver latestDriver;
-    private final ReentrantReadWriteLock latestDriverLock = new ReentrantReadWriteLock();
+    private ExpiringDriver currentDriver;
+    private final ReentrantReadWriteLock currentDriverMock = new ReentrantReadWriteLock();
 
-    private final List<Driver> previousDrivers = new CopyOnWriteArrayList<>();
+    private final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService cleanupExecutor;
 
     ReAuthDriver(Supplier<ExpiringDriver> driverFactory) {
@@ -49,7 +49,7 @@ public class ReAuthDriver implements Driver {
 
     ReAuthDriver(Supplier<ExpiringDriver> driverFactory, long cleanupIntervalMillis) {
         this.driverFactory = driverFactory;
-        latestDriver = driverFactory.get();
+        currentDriver = driverFactory.get();
 
         cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
         cleanupExecutor.scheduleAtFixedRate(
@@ -58,7 +58,7 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public boolean isEncrypted() {
-        return latestDriver.getDriver().isEncrypted();
+        return currentDriver.getDriver().isEncrypted();
     }
 
     @Override
@@ -93,32 +93,32 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public void close() {
-        previousDrivers.forEach(Driver::close);
-        latestDriver.getDriver().close();
+        expiredDrivers.forEach(Driver::close);
+        currentDriver.getDriver().close();
         cleanupExecutor.shutdown();
     }
 
     @Override
     public CompletionStage<Void> closeAsync() {
-        var closeAsync = latestDriver.getDriver().closeAsync();
-        return previousDrivers.stream()
+        var closeAsync = currentDriver.getDriver().closeAsync();
+        return expiredDrivers.stream()
                 .map(Driver::closeAsync)
                 .reduce(closeAsync, (acc, ca) -> acc.thenCombine(ca, (a, b) -> b));
     }
 
     @Override
     public Metrics metrics() {
-        return latestDriver.getDriver().metrics();
+        return currentDriver.getDriver().metrics();
     }
 
     @Override
     public boolean isMetricsEnabled() {
-        return latestDriver.getDriver().isMetricsEnabled();
+        return currentDriver.getDriver().isMetricsEnabled();
     }
 
     @Override
     public TypeSystem defaultTypeSystem() {
-        return latestDriver.getDriver().defaultTypeSystem();
+        return currentDriver.getDriver().defaultTypeSystem();
     }
 
     @Override
@@ -142,22 +142,22 @@ public class ReAuthDriver implements Driver {
     }
 
     private void cleanUpPreviousDrivers() {
-        var driverWithNoConnections = previousDrivers.stream()
+        var driverWithNoConnections = expiredDrivers.stream()
                 .filter(driver -> {
                     var connectionPoolMetrics = driver.metrics().connectionPoolMetrics();
                     return connectionPoolMetrics.stream().allMatch(m -> m.inUse() == 0);
                 })
                 .collect(Collectors.toList());
-        previousDrivers.removeAll(driverWithNoConnections);
+        expiredDrivers.removeAll(driverWithNoConnections);
     }
 
     private <T> CompletionStage<T> checkExpirationAsync(Function<Driver, CompletionStage<T>> block) {
-        return block.apply(latestDriver.getDriver())
+        return block.apply(currentDriver.getDriver())
                 .handle((v, throwable) -> {
                     if (throwable != null) {
                         if (throwable instanceof TokenExpiredException) {
-                            rotateLatestDriver(latestDriver.hashCode());
-                            return block.apply(latestDriver.getDriver());
+                            rotateCurrentDriver(currentDriver.hashCode());
+                            return block.apply(currentDriver.getDriver());
                         }
                         return CompletableFuture.<T>failedFuture(throwable);
                     }
@@ -174,32 +174,32 @@ public class ReAuthDriver implements Driver {
     }
 
     private <T> T checkExpiration(Function<Driver, T> block) {
-        latestDriverLock.readLock().lock();
-        var latestDriverHashCode = latestDriver.getDriver().hashCode();
-        if (latestDriver.isExpired()) {
-            rotateLatestDriver(latestDriverHashCode);
+        currentDriverMock.readLock().lock();
+        var latestDriverHashCode = currentDriver.getDriver().hashCode();
+        if (currentDriver.isExpired()) {
+            rotateCurrentDriver(latestDriverHashCode);
         }
         try {
-            return block.apply(latestDriver.getDriver());
+            return block.apply(currentDriver.getDriver());
         } catch (TokenExpiredException e) {
-            rotateLatestDriver(latestDriverHashCode);
-            return block.apply(latestDriver.getDriver());
+            rotateCurrentDriver(latestDriverHashCode);
+            return block.apply(currentDriver.getDriver());
         } finally {
-            latestDriverLock.readLock().unlock();
+            currentDriverMock.readLock().unlock();
         }
     }
 
-    private void rotateLatestDriver(int hashCode) {
-        latestDriverLock.readLock().unlock();
-        latestDriverLock.writeLock().lock();
+    private void rotateCurrentDriver(int hashCode) {
+        currentDriverMock.readLock().unlock();
+        currentDriverMock.writeLock().lock();
         try {
-            if (latestDriver.getDriver().hashCode() == hashCode) {
-                previousDrivers.add(latestDriver.getDriver());
-                latestDriver = driverFactory.get();
+            if (currentDriver.getDriver().hashCode() == hashCode) {
+                expiredDrivers.add(currentDriver.getDriver());
+                currentDriver = driverFactory.get();
             }
-            latestDriverLock.readLock().lock();
+            currentDriverMock.readLock().lock();
         } finally {
-            latestDriverLock.writeLock().unlock();
+            currentDriverMock.writeLock().unlock();
         }
     }
 }
