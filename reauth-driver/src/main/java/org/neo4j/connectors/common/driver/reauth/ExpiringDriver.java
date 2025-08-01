@@ -18,7 +18,6 @@ package org.neo4j.connectors.common.driver.reauth;
 
 import java.time.Instant;
 import java.util.Objects;
-
 import org.neo4j.driver.Driver;
 
 public class ExpiringDriver {

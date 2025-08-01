@@ -31,4 +31,8 @@ public class BearerAuthenticationToken implements ExpiringAuthenticationToken {
     public Instant getExpiresAt() {
         return expiresAt;
     }
+
+    public String getToken() {
+        return token;
+    }
 }

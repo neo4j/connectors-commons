@@ -18,14 +18,6 @@
     </properties>
     <dependencies>
         <dependency>
-            <groupId>com.fasterxml.jackson.jr</groupId>
-            <artifactId>jackson-jr-objects</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.keycloak</groupId>
-            <artifactId>keycloak-authz-client</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.neo4j.driver</groupId>
             <artifactId>neo4j-java-driver-slim</artifactId>
             <version>${neo4j-driver.version}</version>
@@ -48,6 +40,16 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j.connectors</groupId>
+            <artifactId>commons-authn-keycloak</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j.connectors</groupId>
+            <artifactId>commons-authn-spi</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

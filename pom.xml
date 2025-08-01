@@ -40,9 +40,9 @@
     </scm>
     <properties>
         <assertj-core.version>3.27.3</assertj-core.version>
-        <jackson.version>2.19.2</jackson.version>
         <awaitility.version>4.3.0</awaitility.version>
-         <jboss-logging.version>3.6.1.Final</jboss-logging.version>
+        <jackson.version>2.19.2</jackson.version>
+        <jboss-logging.version>3.6.1.Final</jboss-logging.version>
         <junit-bom.version>5.13.4</junit-bom.version>
         <junit4.version/>
         <keycloak.version>26.0.6</keycloak.version>
@@ -108,6 +108,11 @@
                 <groupId>org.keycloak</groupId>
                 <artifactId>keycloak-authz-client</artifactId>
                 <version>${keycloak.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.neo4j.connectors</groupId>
+                <artifactId>commons-authn-keycloak</artifactId>
+                <version>${version}</version>
             </dependency>
             <dependency>
                 <groupId>org.neo4j.connectors</groupId>

@@ -33,8 +33,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
-import org.neo4j.connectors.common.driver.reauth.tmp.KCAuthenticationSupplier;
-import org.neo4j.connectors.common.driver.reauth.tmp.TokenAuthentication;
+import org.neo4j.connectors.authn.BearerAuthenticationToken;
+import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
 import org.neo4j.driver.AuthTokens;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.GraphDatabase;
@@ -59,8 +59,7 @@ public class ReAuthDriverIT {
             .useTlsKeystore("/keycloak.jks", "testpwd")
             .withRealmImportFile("neo4j-sso-test-realm.json")
             .withEnv("KC_HOSTNAME", "https://keycloak:8443")
-            .withEnv("KC_HOSTNAME_BACKCHANNEL_DYNAMIC", "true")
-            .withLogConsumer(outputFrame -> System.out.print(outputFrame.getUtf8String()));
+            .withEnv("KC_HOSTNAME_BACKCHANNEL_DYNAMIC", "true");
 
     @SuppressWarnings("resource")
     private static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(
@@ -90,10 +89,9 @@ public class ReAuthDriverIT {
             .withNeo4jConfig("dbms.security.oidc.keycloak.client_id", "neo4j-commons-client")
             .withNeo4jConfig("dbms.security.oidc.keycloak.claims.username", "preferred_username")
             .withNeo4jConfig("dbms.security.oidc.keycloak.claims.groups", "groups")
-            .withNeo4jConfig("dbms.security.auth_cache_ttl", "1s")
-            .withLogConsumer(outputFrame -> System.out.print(outputFrame.getUtf8String()));
+            .withNeo4jConfig("dbms.security.auth_cache_ttl", "1s");
 
-    private static KCAuthenticationSupplier authenticationSupplier;
+    private static KeycloakOIDCAuthenticationSupplier authenticationSupplier;
 
     @BeforeAll
     static void startContainersAndMetrics() {
@@ -106,8 +104,8 @@ public class ReAuthDriverIT {
                 "neo4j-commons-client",
                 Map.of("secret", "QNrSpbh0mxhnlYlI21UcBaz3Htb734vi"),
                 HttpClients.createMinimal());
-        authenticationSupplier =
-                (KCAuthenticationSupplier) KCAuthenticationSupplier.of("john-tester", "testerpwd", authzConfiguration);
+        authenticationSupplier = (KeycloakOIDCAuthenticationSupplier)
+                KeycloakOIDCAuthenticationSupplier.of("john-tester", "testerpwd", authzConfiguration);
     }
 
     static Stream<Arguments> expiringMethods() {
@@ -153,10 +151,10 @@ public class ReAuthDriverIT {
     void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) {
         var createdDrivers = new CopyOnWriteArrayList<Driver>();
         Supplier<ExpiringDriver> driverSupplier = () -> {
-            var token = (TokenAuthentication) authenticationSupplier.get();
-            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getValue()));
+            var token = (BearerAuthenticationToken) authenticationSupplier.get();
+            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()));
             createdDrivers.add(driver);
-            return new ExpiringDriver(driver, token.expiresAt());
+            return new ExpiringDriver(driver, token.getExpiresAt());
         };
 
         try (var driver = new ReAuthDriver(driverSupplier)) {

@@ -51,6 +51,10 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<Authenticati
         this.http = new Http(config, config.getClientCredentialsProvider());
     }
 
+    public static Supplier<AuthenticationToken> of(String username, String password, Configuration config) {
+        return new KeycloakOIDCAuthenticationSupplier(username, password, config);
+    }
+
     private String constructUrl(Configuration config) {
         return config.getAuthServerUrl() + "/realms/" + config.getRealm() + "/protocol/openid-connect/token";
     }
