@@ -153,20 +153,20 @@ public class ReAuthDriver implements Driver {
         currentDriverLock.readLock().lock();
         var latestDriverHashCode = currentDriver.getDriver().hashCode();
         if (currentDriver.isExpired()) {
+            currentDriverLock.readLock().unlock();
             rotateCurrentDriver(latestDriverHashCode);
+            currentDriverLock.readLock().lock();
         }
+        currentDriverLock.readLock().unlock();
         try {
             return block.apply(currentDriver.getDriver());
         } catch (TokenExpiredException e) {
             rotateCurrentDriver(latestDriverHashCode);
             return block.apply(currentDriver.getDriver());
-        } finally {
-            currentDriverLock.readLock().unlock();
         }
     }
 
     private void rotateCurrentDriver(int hashCode) {
-        currentDriverLock.readLock().unlock();
         currentDriverLock.writeLock().lock();
         try {
             // Verify hash code because current driver may be updated by another thread
@@ -174,7 +174,6 @@ public class ReAuthDriver implements Driver {
                 expiredDrivers.add(currentDriver.getDriver());
                 currentDriver = driverFactory.get();
             }
-            currentDriverLock.readLock().lock();
         } finally {
             currentDriverLock.writeLock().unlock();
         }

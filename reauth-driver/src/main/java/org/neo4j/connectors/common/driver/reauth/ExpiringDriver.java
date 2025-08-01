@@ -17,6 +17,8 @@
 package org.neo4j.connectors.common.driver.reauth;
 
 import java.time.Instant;
+import java.util.Objects;
+
 import org.neo4j.driver.Driver;
 
 public class ExpiringDriver {
@@ -25,8 +27,8 @@ public class ExpiringDriver {
     private final Instant expiresAt;
 
     public ExpiringDriver(Driver driver, Instant expiresAt) {
-        this.driver = driver;
-        this.expiresAt = expiresAt;
+        this.driver = Objects.requireNonNull(driver);
+        this.expiresAt = Objects.requireNonNull(expiresAt);
     }
 
     public Driver getDriver() {
@@ -38,9 +40,6 @@ public class ExpiringDriver {
     }
 
     public boolean isExpired() {
-        if (expiresAt == null) {
-            return false;
-        }
         return Instant.now().isAfter(expiresAt);
     }
 }
