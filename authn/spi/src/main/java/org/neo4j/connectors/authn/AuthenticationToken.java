@@ -27,8 +27,8 @@ public interface AuthenticationToken {
         return new BearerAuthenticationToken(token, expiresAt);
     }
 
-    static BearerAuthenticationToken kerberos(String token) {
-        return new BearerAuthenticationToken(token, null);
+    static KerberosAuthenticationToken kerberos(String token) {
+        return new KerberosAuthenticationToken(token);
     }
 
     static DisabledAuthenticationToken none() {
