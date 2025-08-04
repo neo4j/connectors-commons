@@ -20,11 +20,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.AfterAll;
@@ -41,7 +44,9 @@ import org.neo4j.driver.reactive.RxSession;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.shaded.com.google.common.util.concurrent.Futures;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
+import org.testcontainers.shaded.org.checkerframework.common.value.qual.IntRange;
 import org.testcontainers.utility.MountableFile;
 import reactor.core.publisher.Mono;
 
@@ -163,6 +168,43 @@ public class ReAuthDriverIT {
             Awaitility.await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
 
             func.accept(driver);
+            assertThat(createdDrivers).hasSize(2);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("expiringMethods")
+    void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func) throws InterruptedException, ExecutionException {
+        var createdDrivers = new CopyOnWriteArrayList<Driver>();
+        Supplier<ExpiringDriver> driverSupplier = () -> {
+            var token = authenticationSupplier.get();
+            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()));
+            createdDrivers.add(driver);
+            return new ExpiringDriver(driver, token.getExpiresAt());
+        };
+
+        try (var driver = new ReAuthDriver(driverSupplier)) {
+            func.accept(driver);
+            assertThat(createdDrivers).hasSize(1);
+
+            Awaitility.await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+
+            var executor = Executors.newFixedThreadPool(10);
+            try {
+                List<Callable<Void>> jobs = IntStream.range(0, 20)
+                        .mapToObj(i -> (Callable<Void>) () -> {
+                            func.accept(driver);
+                            return null;
+                        })
+                        .collect(Collectors.toList());
+                var futures = executor.invokeAll(jobs);
+                for (Future<Void> future : futures) {
+                    future.get();
+                }
+            } finally {
+                executor.shutdownNow();
+            }
+
             assertThat(createdDrivers).hasSize(2);
         }
     }
