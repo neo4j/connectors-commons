@@ -44,9 +44,7 @@ import org.neo4j.driver.reactive.RxSession;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.shaded.com.google.common.util.concurrent.Futures;
 import org.testcontainers.shaded.org.awaitility.Awaitility;
-import org.testcontainers.shaded.org.checkerframework.common.value.qual.IntRange;
 import org.testcontainers.utility.MountableFile;
 import reactor.core.publisher.Mono;
 
@@ -174,7 +172,8 @@ public class ReAuthDriverIT {
 
     @ParameterizedTest
     @MethodSource("expiringMethods")
-    void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func) throws InterruptedException, ExecutionException {
+    void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func)
+            throws InterruptedException, ExecutionException {
         var createdDrivers = new CopyOnWriteArrayList<Driver>();
         Supplier<ExpiringDriver> driverSupplier = () -> {
             var token = authenticationSupplier.get();

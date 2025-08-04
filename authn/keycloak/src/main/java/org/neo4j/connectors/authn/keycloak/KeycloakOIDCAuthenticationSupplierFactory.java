@@ -19,10 +19,8 @@ package org.neo4j.connectors.authn.keycloak;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
-
 import org.apache.http.impl.client.HttpClients;
 import org.keycloak.authorization.client.Configuration;
-import org.neo4j.connectors.authn.AuthenticationTokenSupplier;
 import org.neo4j.connectors.authn.AuthenticationTokenSupplierFactory;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
 

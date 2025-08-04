@@ -24,7 +24,6 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
-
 import org.keycloak.authorization.client.AuthzClient;
 import org.keycloak.authorization.client.Configuration;
 import org.keycloak.authorization.client.util.Http;
@@ -53,8 +52,7 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthen
         this.http = new Http(config, config.getClientCredentialsProvider());
     }
 
-    public static Supplier<BearerAuthenticationToken> of(
-            String username, String password, Configuration config) {
+    public static Supplier<BearerAuthenticationToken> of(String username, String password, Configuration config) {
         return new KeycloakOIDCAuthenticationSupplier(username, password, config);
     }
 
