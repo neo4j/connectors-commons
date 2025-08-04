@@ -61,12 +61,13 @@ public class ReAuthDriverIT {
             .useTlsKeystore("/keycloak.jks", "testpwd")
             .withRealmImportFile("neo4j-sso-test-realm.json")
             .withEnv("KC_HOSTNAME", "https://keycloak:8443")
-            .withEnv("KC_HOSTNAME_BACKCHANNEL_DYNAMIC", "true");
+            .withEnv("KC_HOSTNAME_BACKCHANNEL_DYNAMIC", "true")
+            .withLogConsumer(outputFrame -> System.out.print(outputFrame.getUtf8String()));
 
     @SuppressWarnings("resource")
     private static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(
                     Optional.ofNullable(System.getProperty("neo4j-connectors-commons.default-neo4j-image"))
-                            .or(() -> Optional.of("neo4j:5.26.8"))
+                            .or(() -> Optional.of("neo4j:5.26.9"))
                             .map(v -> !v.contains("-enterprise") ? v + "-enterprise" : v)
                             .orElseThrow())
             .waitingFor(Neo4jContainer.WAIT_FOR_BOLT)
@@ -91,7 +92,8 @@ public class ReAuthDriverIT {
             .withNeo4jConfig("dbms.security.oidc.keycloak.client_id", "neo4j-commons-client")
             .withNeo4jConfig("dbms.security.oidc.keycloak.claims.username", "preferred_username")
             .withNeo4jConfig("dbms.security.oidc.keycloak.claims.groups", "groups")
-            .withNeo4jConfig("dbms.security.auth_cache_ttl", "1s");
+            .withNeo4jConfig("dbms.security.auth_cache_ttl", "1s")
+            .withLogConsumer(outputFrame -> System.out.print(outputFrame.getUtf8String()));
 
     private static KeycloakOIDCAuthenticationSupplier authenticationSupplier;
 
