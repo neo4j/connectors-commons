@@ -19,5 +19,5 @@ package org.neo4j.connectors.authn;
 import java.time.Instant;
 
 public interface ExpiringAuthenticationToken extends AuthenticationToken {
-    public Instant getExpiresAt();
+    Instant getExpiresAt();
 }

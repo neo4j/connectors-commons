@@ -18,6 +18,8 @@ package org.neo4j.connectors.authn.keycloak;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
+
 import org.apache.http.impl.client.HttpClients;
 import org.keycloak.authorization.client.Configuration;
 import org.neo4j.connectors.authn.AuthenticationTokenSupplier;
@@ -30,7 +32,7 @@ import org.neo4j.connectors.authn.BearerAuthenticationToken;
 public class KeycloakOIDCAuthenticationSupplierFactory
         implements AuthenticationTokenSupplierFactory<BearerAuthenticationToken> {
     @Override
-    public AuthenticationTokenSupplier<BearerAuthenticationToken> create(
+    public Supplier<BearerAuthenticationToken> create(
             String username, String password, Map<String, String> parameters) {
         // make sure parameters are passed
         var url = Objects.requireNonNull(parameters.get("authServerUrl"));

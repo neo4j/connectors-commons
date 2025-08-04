@@ -23,18 +23,19 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
+
 import org.keycloak.authorization.client.AuthzClient;
 import org.keycloak.authorization.client.Configuration;
 import org.keycloak.authorization.client.util.Http;
 import org.keycloak.representations.AccessTokenResponse;
 import org.neo4j.connectors.authn.AuthenticationToken;
-import org.neo4j.connectors.authn.AuthenticationTokenSupplier;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
 
 /**
  * This supplier uses OAth2 resource owner flow via the Keycloak client.
  */
-public class KeycloakOIDCAuthenticationSupplier implements AuthenticationTokenSupplier<BearerAuthenticationToken> {
+public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthenticationToken> {
     private final String username;
     private final String password;
     private final Configuration config;
@@ -52,7 +53,7 @@ public class KeycloakOIDCAuthenticationSupplier implements AuthenticationTokenSu
         this.http = new Http(config, config.getClientCredentialsProvider());
     }
 
-    public static AuthenticationTokenSupplier<BearerAuthenticationToken> of(
+    public static Supplier<BearerAuthenticationToken> of(
             String username, String password, Configuration config) {
         return new KeycloakOIDCAuthenticationSupplier(username, password, config);
     }

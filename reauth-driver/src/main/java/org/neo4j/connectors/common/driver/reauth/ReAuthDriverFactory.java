@@ -21,9 +21,9 @@ import java.util.function.Supplier;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
 import org.neo4j.driver.*;
 
-public final class ConnectorsGraphDatabase {
+public final class ReAuthDriverFactory {
 
-    private ConnectorsGraphDatabase() {}
+    private ReAuthDriverFactory() {}
 
     public static Driver driver(String uri, Supplier<BearerAuthenticationToken> authTokenSupplier) {
         return driver(URI.create(uri), authTokenSupplier, Config.defaultConfig());
