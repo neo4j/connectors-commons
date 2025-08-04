@@ -37,7 +37,7 @@ public class ReAuthDriver implements Driver {
     private ExpiringDriver currentDriver;
     private final ReentrantReadWriteLock currentDriverLock = new ReentrantReadWriteLock();
 
-    private final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
+    final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService cleanupExecutor;
 
     ReAuthDriver(Supplier<ExpiringDriver> driverFactory) {
@@ -47,6 +47,9 @@ public class ReAuthDriver implements Driver {
     ReAuthDriver(Supplier<ExpiringDriver> driverFactory, long cleanupIntervalMillis) {
         this.driverFactory = driverFactory;
         currentDriver = driverFactory.get();
+        if (!currentDriver.getDriver().isMetricsEnabled()) {
+            throw new IllegalArgumentException("Driver must be configured with metrics enabled");
+        }
 
         cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
         cleanupExecutor.scheduleAtFixedRate(
@@ -145,7 +148,7 @@ public class ReAuthDriver implements Driver {
                     return connectionPoolMetrics.stream().allMatch(m -> m.inUse() == 0);
                 })
                 .collect(Collectors.toList());
-        expiredDrivers.forEach(Driver::close);
+        driverWithNoConnections.forEach(Driver::close);
         expiredDrivers.removeAll(driverWithNoConnections);
     }
 

@@ -17,6 +17,7 @@
 package org.neo4j.connectors.common.driver.reauth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import java.time.Duration;
@@ -32,19 +33,17 @@ import java.util.stream.Stream;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
 import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
-import org.neo4j.driver.AuthTokens;
-import org.neo4j.driver.Driver;
-import org.neo4j.driver.GraphDatabase;
+import org.neo4j.driver.*;
 import org.neo4j.driver.reactive.RxSession;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
 import org.testcontainers.utility.MountableFile;
 import reactor.core.publisher.Mono;
 
@@ -153,22 +152,15 @@ public class ReAuthDriverIT {
     @ParameterizedTest
     @MethodSource("expiringMethods")
     void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) {
-        var createdDrivers = new CopyOnWriteArrayList<Driver>();
-        Supplier<ExpiringDriver> driverSupplier = () -> {
-            var token = authenticationSupplier.get();
-            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()));
-            createdDrivers.add(driver);
-            return new ExpiringDriver(driver, token.getExpiresAt());
-        };
-
-        try (var driver = new ReAuthDriver(driverSupplier)) {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
-            assertThat(createdDrivers).hasSize(1);
+            assertThat(driversLog).hasSize(1);
 
-            Awaitility.await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+            await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
 
             func.accept(driver);
-            assertThat(createdDrivers).hasSize(2);
+            assertThat(driversLog).hasSize(2);
         }
     }
 
@@ -176,19 +168,12 @@ public class ReAuthDriverIT {
     @MethodSource("expiringMethods")
     void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func)
             throws InterruptedException, ExecutionException {
-        var createdDrivers = new CopyOnWriteArrayList<Driver>();
-        Supplier<ExpiringDriver> driverSupplier = () -> {
-            var token = authenticationSupplier.get();
-            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()));
-            createdDrivers.add(driver);
-            return new ExpiringDriver(driver, token.getExpiresAt());
-        };
-
-        try (var driver = new ReAuthDriver(driverSupplier)) {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
-            assertThat(createdDrivers).hasSize(1);
+            assertThat(driversLog).hasSize(1);
 
-            Awaitility.await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+            await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
 
             var executor = Executors.newFixedThreadPool(10);
             try {
@@ -206,8 +191,36 @@ public class ReAuthDriverIT {
                 executor.shutdownNow();
             }
 
-            assertThat(createdDrivers).hasSize(2);
+            assertThat(driversLog).hasSize(2);
         }
+    }
+
+    @Test
+    void reAuthDriverCleansUpExpiredDrivers() {
+        @SuppressWarnings("unchecked")
+        var func = (Consumer<Driver>) expiringMethods().findFirst().orElseThrow().get()[0];
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
+            func.accept(driver);
+            assertThat(driversLog).hasSize(1);
+
+            await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+
+            func.accept(driver);
+            assertThat(driversLog).hasSize(2);
+
+            await().atMost(Duration.ofSeconds(1)).until(driver.expiredDrivers::isEmpty);
+        }
+    }
+
+    private static Supplier<ExpiringDriver> driverSupplier(List<Driver> driversLog) {
+        return () -> {
+            var token = authenticationSupplier.get();
+            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()),
+                    ReAuthDriverFactory.defaultConfig());
+            driversLog.add(driver);
+            return new ExpiringDriver(driver, token.getExpiresAt());
+        };
     }
 
     @AfterAll

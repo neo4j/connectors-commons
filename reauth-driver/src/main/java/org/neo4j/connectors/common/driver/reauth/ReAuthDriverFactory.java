@@ -26,11 +26,11 @@ public final class ReAuthDriverFactory {
     private ReAuthDriverFactory() {}
 
     public static Driver driver(String uri, Supplier<BearerAuthenticationToken> authTokenSupplier) {
-        return driver(URI.create(uri), authTokenSupplier, Config.defaultConfig());
+        return driver(URI.create(uri), authTokenSupplier, defaultConfig());
     }
 
     public static Driver driver(URI uri, Supplier<BearerAuthenticationToken> authTokenSupplier) {
-        return driver(uri, authTokenSupplier, Config.defaultConfig());
+        return driver(uri, authTokenSupplier, defaultConfig());
     }
 
     public static Driver driver(String uri, Supplier<BearerAuthenticationToken> authTokenSupplier, Config config) {
@@ -43,5 +43,9 @@ public final class ReAuthDriverFactory {
             var driver = GraphDatabase.driver(uri, AuthTokens.bearer(authToken.getToken()), config);
             return new ExpiringDriver(driver, authToken.getExpiresAt());
         });
+    }
+
+    static Config defaultConfig() {
+        return Config.builder().withDriverMetrics().build();
     }
 }
