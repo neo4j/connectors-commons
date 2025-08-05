@@ -198,7 +198,8 @@ public class ReAuthDriverIT {
     @Test
     void reAuthDriverCleansUpExpiredDrivers() {
         @SuppressWarnings("unchecked")
-        var func = (Consumer<Driver>) expiringMethods().findFirst().orElseThrow().get()[0];
+        var func =
+                (Consumer<Driver>) expiringMethods().findFirst().orElseThrow().get()[0];
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
             func.accept(driver);
@@ -216,8 +217,8 @@ public class ReAuthDriverIT {
     private static Supplier<ExpiringDriver> driverSupplier(List<Driver> driversLog) {
         return () -> {
             var token = authenticationSupplier.get();
-            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()),
-                    ReAuthDriverFactory.defaultConfig());
+            var driver = GraphDatabase.driver(
+                    NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), ReAuthDriverFactory.defaultConfig());
             driversLog.add(driver);
             return new ExpiringDriver(driver, token.getExpiresAt());
         };
