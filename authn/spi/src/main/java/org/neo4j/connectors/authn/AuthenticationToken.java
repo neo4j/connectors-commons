@@ -23,23 +23,23 @@ public interface AuthenticationToken {
         return bearer(token, null);
     }
 
-    static AuthenticationToken bearer(String token, Instant expiresAt) {
+    static BearerAuthenticationToken bearer(String token, Instant expiresAt) {
         return new BearerAuthenticationToken(token, expiresAt);
     }
 
-    static AuthenticationToken kerberos(String token) {
-        return new BearerAuthenticationToken(token, null);
+    static KerberosAuthenticationToken kerberos(String token) {
+        return new KerberosAuthenticationToken(token);
     }
 
-    static AuthenticationToken none() {
+    static DisabledAuthenticationToken none() {
         return DisabledAuthenticationToken.NONE;
     }
 
-    static AuthenticationToken usernameAndPassword(String username, String password) {
+    static UserNameAndPasswordAuthenticationToken usernameAndPassword(String username, String password) {
         return usernameAndPassword(username, password, null);
     }
 
-    static AuthenticationToken usernameAndPassword(String username, String password, String realm) {
+    static UserNameAndPasswordAuthenticationToken usernameAndPassword(String username, String password, String realm) {
         return new UserNameAndPasswordAuthenticationToken(username, password, realm);
     }
 }

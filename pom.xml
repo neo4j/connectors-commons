@@ -40,6 +40,7 @@
     </scm>
     <properties>
         <assertj-core.version>3.27.3</assertj-core.version>
+        <awaitility.version>4.3.0</awaitility.version>
         <jackson.version>2.19.2</jackson.version>
         <jboss-logging.version>3.6.1.Final</jboss-logging.version>
         <junit-bom.version>5.13.4</junit-bom.version>
@@ -48,6 +49,7 @@
         <maven.compiler.release>11</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <testcontainers-bom.version>1.21.3</testcontainers-bom.version>
+        <testcontainers-keycloak.version>3.8.0</testcontainers-keycloak.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -73,9 +75,28 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>com.github.dasniko</groupId>
+                <artifactId>testcontainers-keycloak</artifactId>
+                <version>${testcontainers-keycloak.version}</version>
+            </dependency>
+            <!--
+                Required for com.github.dasniko:testcontainers-keycloak.
+                Version 3.6.9 is a minimal version supporting JDK 11.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-junit4-mock</artifactId>
+                <version>3.6.9</version>
+            </dependency>
+            <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>${awaitility.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.jboss.logging</groupId>
@@ -86,6 +107,11 @@
                 <groupId>org.keycloak</groupId>
                 <artifactId>keycloak-authz-client</artifactId>
                 <version>${keycloak.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.neo4j.connectors</groupId>
+                <artifactId>commons-authn-keycloak</artifactId>
+                <version>${version}</version>
             </dependency>
             <dependency>
                 <groupId>org.neo4j.connectors</groupId>

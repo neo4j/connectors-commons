@@ -29,11 +29,12 @@ import org.keycloak.authorization.client.Configuration;
 import org.keycloak.authorization.client.util.Http;
 import org.keycloak.representations.AccessTokenResponse;
 import org.neo4j.connectors.authn.AuthenticationToken;
+import org.neo4j.connectors.authn.BearerAuthenticationToken;
 
 /**
  * This supplier uses OAth2 resource owner flow via the Keycloak client.
  */
-public class KeycloakOIDCAuthenticationSupplier implements Supplier<AuthenticationToken> {
+public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthenticationToken> {
     private final String username;
     private final String password;
     private final Configuration config;
@@ -51,6 +52,10 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<Authenticati
         this.http = new Http(config, config.getClientCredentialsProvider());
     }
 
+    public static Supplier<BearerAuthenticationToken> of(String username, String password, Configuration config) {
+        return new KeycloakOIDCAuthenticationSupplier(username, password, config);
+    }
+
     private String constructUrl(Configuration config) {
         return config.getAuthServerUrl() + "/realms/" + config.getRealm() + "/protocol/openid-connect/token";
     }
@@ -63,7 +68,7 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<Authenticati
     }
 
     @Override
-    public AuthenticationToken get() {
+    public BearerAuthenticationToken get() {
         BearerAuthenticationTokenAndTime freshToken = this.token.updateAndGet(this::get0);
         return freshToken.toAuthenticationToken();
     }
@@ -135,7 +140,7 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<Authenticati
             return new BearerAuthenticationTokenAndTime(token, expireAt, accessTokenResponse.getRefreshToken());
         }
 
-        AuthenticationToken toAuthenticationToken() {
+        BearerAuthenticationToken toAuthenticationToken() {
             return AuthenticationToken.bearer(token, expireAt);
         }
     }
