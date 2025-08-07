@@ -86,7 +86,7 @@
             <dependency>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-junit4-mock</artifactId>
-                <version>3.6.9</version>
+                <version>3.25.1</version>
             </dependency>
             <dependency>
                 <groupId>org.assertj</groupId>
