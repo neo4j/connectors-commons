@@ -1,7 +1,12 @@
 version: 2
 updates:
-- package-ecosystem: maven
-  directory: "/"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 10
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "io.quarkus:quarkus-junit4-mock"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"

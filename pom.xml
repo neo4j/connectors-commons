@@ -82,6 +82,7 @@
             <!--
                 Required for com.github.dasniko:testcontainers-keycloak.
                 Version 3.6.9 is a minimal version supporting JDK 11.
+                See rules in: .github/dependabot.yml
             -->
             <dependency>
                 <groupId>io.quarkus</groupId>
