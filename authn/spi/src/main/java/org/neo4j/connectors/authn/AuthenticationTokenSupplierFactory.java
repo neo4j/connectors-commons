@@ -20,5 +20,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 public interface AuthenticationTokenSupplierFactory<T extends AuthenticationToken> {
+    String getName();
+
     Supplier<T> create(String username, String password, Map<String, String> parameters);
 }

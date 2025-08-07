@@ -29,6 +29,12 @@ import org.neo4j.connectors.authn.BearerAuthenticationToken;
  */
 public class KeycloakOIDCAuthenticationSupplierFactory
         implements AuthenticationTokenSupplierFactory<BearerAuthenticationToken> {
+
+    @Override
+    public String getName() {
+        return "keycloak";
+    }
+
     @Override
     public Supplier<BearerAuthenticationToken> create(
             String username, String password, Map<String, String> parameters) {
