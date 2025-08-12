@@ -154,7 +154,7 @@ public class ReAuthDriver implements Driver {
 
     private <T> T checkExpiration(Function<Driver, T> block) {
         currentDriverLock.readLock().lock();
-        var latestDriverHashCode = currentDriver.getDriver().hashCode();
+        var latestDriverHashCode = System.identityHashCode(currentDriver.getDriver());
         if (currentDriver.isExpired()) {
             currentDriverLock.readLock().unlock();
             rotateCurrentDriver(latestDriverHashCode);
