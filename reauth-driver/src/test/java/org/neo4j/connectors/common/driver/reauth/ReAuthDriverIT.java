@@ -39,6 +39,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
+import org.neo4j.connectors.authn.BearerAuthenticationToken;
 import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
 import org.neo4j.driver.*;
 import org.neo4j.driver.async.ResultCursor;
@@ -307,7 +308,7 @@ public class ReAuthDriverIT {
 
     private static Supplier<ExpiringDriver> driverSupplier(List<Driver> driversLog) {
         return () -> {
-            var token = authenticationSupplier.get();
+            var token = (BearerAuthenticationToken) authenticationSupplier.get();
             var driver = GraphDatabase.driver(
                     NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), ReAuthDriverFactory.defaultConfig());
             driversLog.add(driver);

@@ -16,10 +16,11 @@
  */
 package org.neo4j.connectors.common.driver.reauth;
 
+import static java.lang.String.format;
+
 import java.net.URI;
 import java.util.function.Supplier;
-import org.neo4j.connectors.authn.AuthenticationToken;
-import org.neo4j.connectors.authn.BearerAuthenticationToken;
+import org.neo4j.connectors.authn.*;
 import org.neo4j.driver.*;
 
 public final class ReAuthDriverFactory {
@@ -39,15 +40,52 @@ public final class ReAuthDriverFactory {
     }
 
     public static Driver driver(URI uri, Supplier<AuthenticationToken> authTokenSupplier, Config config) {
-        return new ReAuthDriver(() -> {
-            var authToken = authTokenSupplier.get();
-            if (!(authToken instanceof BearerAuthenticationToken)) {
-                throw new IllegalArgumentException("Only BearerAuthenticationToken is supported");
-            }
-            var bearerToken = (BearerAuthenticationToken) authToken;
-            var driver = GraphDatabase.driver(uri, AuthTokens.bearer(bearerToken.getToken()), config);
-            return new ExpiringDriver(driver, bearerToken.getExpiresAt());
-        });
+        var authenticationToken = authTokenSupplier.get();
+        var originalDriver = GraphDatabase.driver(uri, convertToAuthToken(authenticationToken), config);
+
+        if (!(authenticationToken instanceof ExpiringAuthenticationToken)) {
+            return originalDriver;
+        }
+
+        Supplier<ExpiringDriver> refresher = () -> {
+            var refreshedToken = authTokenSupplier.get();
+            var expiresAt = refreshedToken instanceof ExpiringAuthenticationToken
+                    ? ((ExpiringAuthenticationToken) refreshedToken).getExpiresAt()
+                    : null;
+            var driver = GraphDatabase.driver(uri, convertToAuthToken(refreshedToken), config);
+            return new ExpiringDriver(driver, expiresAt);
+        };
+        var expiringToken = (ExpiringAuthenticationToken) authenticationToken;
+        return new ReAuthDriver(new ExpiringDriver(originalDriver, expiringToken.getExpiresAt()), refresher);
+    }
+
+    private static AuthToken convertToAuthToken(AuthenticationToken token) throws IllegalArgumentException {
+        if (token instanceof BearerAuthenticationToken) {
+            var bearerToken = (BearerAuthenticationToken) token;
+            return AuthTokens.bearer(bearerToken.getToken());
+        }
+        if (token instanceof KerberosAuthenticationToken) {
+            var kerberosToken = (KerberosAuthenticationToken) token;
+            return AuthTokens.kerberos(kerberosToken.getToken());
+        }
+        if (token instanceof UserNameAndPasswordAuthenticationToken) {
+            var userNameAndPasswordToken = (UserNameAndPasswordAuthenticationToken) token;
+            return AuthTokens.basic(userNameAndPasswordToken.getUsername(), userNameAndPasswordToken.getPassword());
+        }
+        if (token instanceof DisabledAuthenticationToken) {
+            return AuthTokens.none();
+        }
+        if (token instanceof CustomAuthenticationToken) {
+            var customToken = (CustomAuthenticationToken) token;
+            return AuthTokens.custom(
+                    customToken.getPrincipal(),
+                    customToken.getCredentials(),
+                    customToken.getRealm(),
+                    customToken.getScheme(),
+                    customToken.getParameters());
+        }
+        throw new IllegalArgumentException(
+                format("Authentication token of class %s is not supported", token.getClass()));
     }
 
     static Config defaultConfig() {

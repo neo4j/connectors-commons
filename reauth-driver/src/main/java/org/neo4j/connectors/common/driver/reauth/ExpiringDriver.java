@@ -27,7 +27,7 @@ class ExpiringDriver {
 
     public ExpiringDriver(Driver driver, Instant expiresAt) {
         this.driver = Objects.requireNonNull(driver);
-        this.expiresAt = Objects.requireNonNull(expiresAt);
+        this.expiresAt = expiresAt;
     }
 
     public Driver getDriver() {
@@ -39,6 +39,6 @@ class ExpiringDriver {
     }
 
     public boolean isExpired() {
-        return Instant.now().isAfter(expiresAt);
+        return expiresAt != null && Instant.now().isAfter(expiresAt);
     }
 }

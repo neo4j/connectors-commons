@@ -40,13 +40,21 @@ public class ReAuthDriver implements Driver {
     final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService cleanupExecutor;
 
+    ReAuthDriver(ExpiringDriver currentDriver, Supplier<ExpiringDriver> driverFactory) {
+        this(currentDriver, driverFactory, DEFAULT_CLEANUP_INTERVAL_MILLIS);
+    }
+
     ReAuthDriver(Supplier<ExpiringDriver> driverFactory) {
-        this(driverFactory, DEFAULT_CLEANUP_INTERVAL_MILLIS);
+        this(driverFactory.get(), driverFactory, DEFAULT_CLEANUP_INTERVAL_MILLIS);
     }
 
     ReAuthDriver(Supplier<ExpiringDriver> driverFactory, long cleanupIntervalMillis) {
+        this(driverFactory.get(), driverFactory, cleanupIntervalMillis);
+    }
+
+    ReAuthDriver(ExpiringDriver currentDriver, Supplier<ExpiringDriver> driverFactory, long cleanupIntervalMillis) {
         this.driverFactory = driverFactory;
-        currentDriver = driverFactory.get();
+        this.currentDriver = currentDriver;
         if (!currentDriver.getDriver().isMetricsEnabled()) {
             throw new IllegalArgumentException("Driver must be configured with metrics enabled");
         }
@@ -172,8 +180,8 @@ public class ReAuthDriver implements Driver {
     private void rotateCurrentDriver(int hashCode) {
         currentDriverLock.writeLock().lock();
         try {
-            // Verify hash code because current driver may be updated by another thread
-            if (currentDriver.getDriver().hashCode() == hashCode) {
+            // Verify hash code because the current driver may be updated by another thread
+            if (System.identityHashCode(currentDriver.getDriver()) == hashCode) {
                 expiredDrivers.add(currentDriver.getDriver());
                 currentDriver = driverFactory.get();
             }

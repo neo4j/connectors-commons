@@ -29,19 +29,18 @@ import org.keycloak.authorization.client.Configuration;
 import org.keycloak.authorization.client.util.Http;
 import org.keycloak.representations.AccessTokenResponse;
 import org.neo4j.connectors.authn.AuthenticationToken;
-import org.neo4j.connectors.authn.BearerAuthenticationToken;
 
 /**
  * This supplier uses OAth2 resource owner flow via the Keycloak client.
  */
-public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthenticationToken> {
+public class KeycloakOIDCAuthenticationSupplier implements Supplier<AuthenticationToken> {
     private final String username;
     private final String password;
     private final Configuration config;
     private final AuthzClient client;
     private final Http http;
     private final String url;
-    private final AtomicReference<BearerAuthenticationTokenAndTime> token = new AtomicReference<>();
+    private final AtomicReference<AuthenticationTokenAndTime> token = new AtomicReference<>();
 
     KeycloakOIDCAuthenticationSupplier(String username, String password, Configuration config) {
         this.username = username;
@@ -52,7 +51,7 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthen
         this.http = new Http(config, config.getClientCredentialsProvider());
     }
 
-    public static Supplier<BearerAuthenticationToken> of(String username, String password, Configuration config) {
+    public static Supplier<AuthenticationToken> of(String username, String password, Configuration config) {
         return new KeycloakOIDCAuthenticationSupplier(username, password, config);
     }
 
@@ -68,12 +67,12 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthen
     }
 
     @Override
-    public BearerAuthenticationToken get() {
-        BearerAuthenticationTokenAndTime freshToken = this.token.updateAndGet(this::get0);
+    public AuthenticationToken get() {
+        AuthenticationTokenAndTime freshToken = this.token.updateAndGet(this::get0);
         return freshToken.toAuthenticationToken();
     }
 
-    private BearerAuthenticationTokenAndTime get0(BearerAuthenticationTokenAndTime previous) {
+    private AuthenticationTokenAndTime get0(AuthenticationTokenAndTime previous) {
         if (previous == null) {
             return fetch();
         } else {
@@ -81,16 +80,16 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthen
         }
     }
 
-    private BearerAuthenticationTokenAndTime fetch() {
+    private AuthenticationTokenAndTime fetch() {
         try {
             AccessTokenResponse response = this.client.obtainAccessToken(this.username, this.password);
-            return BearerAuthenticationTokenAndTime.of(response);
+            return AuthenticationTokenAndTime.of(response);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    private BearerAuthenticationTokenAndTime refresh(String refreshToken) {
+    private AuthenticationTokenAndTime refresh(String refreshToken) {
         try {
             AccessTokenResponse response = this.http
                     .<AccessTokenResponse>post(this.url)
@@ -105,7 +104,7 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthen
                     .response()
                     .json(AccessTokenResponse.class)
                     .execute();
-            return BearerAuthenticationTokenAndTime.of(response);
+            return AuthenticationTokenAndTime.of(response);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -115,13 +114,13 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthen
      * Couples together a bearer token, with an expiration date, with a refresh token.
      * Internal helper class to help the supplier.
      */
-    private static final class BearerAuthenticationTokenAndTime {
+    private static final class AuthenticationTokenAndTime {
         static final Base64.Decoder DECODER = Base64.getDecoder();
         private final String token;
         private final Instant expireAt;
         private final String refreshToken;
 
-        public BearerAuthenticationTokenAndTime(String token, Instant expireAt, String refreshToken) {
+        public AuthenticationTokenAndTime(String token, Instant expireAt, String refreshToken) {
             this.token = token;
             this.expireAt = expireAt;
             this.refreshToken = refreshToken;
@@ -130,17 +129,17 @@ public class KeycloakOIDCAuthenticationSupplier implements Supplier<BearerAuthen
         /**
          * Decodes an incoming AccessTokenResponse from the SSO server, then creates a new token based on it.
          */
-        static BearerAuthenticationTokenAndTime of(AccessTokenResponse accessTokenResponse) throws IOException {
+        static AuthenticationTokenAndTime of(AccessTokenResponse accessTokenResponse) throws IOException {
             String token = accessTokenResponse.getToken();
             String[] chunks = token.split("\\.");
             Map<String, Object> payload = JSON.std.mapFrom(DECODER.decode(chunks[1]));
             long epoch = ((Number) payload.get("exp")).longValue();
             Instant expireAt = Instant.ofEpochSecond(epoch);
 
-            return new BearerAuthenticationTokenAndTime(token, expireAt, accessTokenResponse.getRefreshToken());
+            return new AuthenticationTokenAndTime(token, expireAt, accessTokenResponse.getRefreshToken());
         }
 
-        BearerAuthenticationToken toAuthenticationToken() {
+        AuthenticationToken toAuthenticationToken() {
             return AuthenticationToken.bearer(token, expireAt);
         }
     }

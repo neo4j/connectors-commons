@@ -17,29 +17,40 @@
 package org.neo4j.connectors.authn;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.Map;
 
 public interface AuthenticationToken {
     static AuthenticationToken bearer(String token) {
         return bearer(token, null);
     }
 
-    static BearerAuthenticationToken bearer(String token, Instant expiresAt) {
+    static AuthenticationToken bearer(String token, Instant expiresAt) {
         return new BearerAuthenticationToken(token, expiresAt);
     }
 
-    static KerberosAuthenticationToken kerberos(String token) {
+    static AuthenticationToken kerberos(String token) {
         return new KerberosAuthenticationToken(token);
     }
 
-    static DisabledAuthenticationToken none() {
+    static AuthenticationToken none() {
         return DisabledAuthenticationToken.NONE;
     }
 
-    static UserNameAndPasswordAuthenticationToken usernameAndPassword(String username, String password) {
+    static AuthenticationToken usernameAndPassword(String username, String password) {
         return usernameAndPassword(username, password, null);
     }
 
-    static UserNameAndPasswordAuthenticationToken usernameAndPassword(String username, String password, String realm) {
+    static AuthenticationToken usernameAndPassword(String username, String password, String realm) {
         return new UserNameAndPasswordAuthenticationToken(username, password, realm);
+    }
+
+    static AuthenticationToken custom(String principal, String credentials, String realm, String scheme) {
+        return custom(principal, credentials, realm, scheme, Collections.emptyMap());
+    }
+
+    static AuthenticationToken custom(
+            String principal, String credentials, String realm, String scheme, Map<String, Object> parameters) {
+        return new CustomAuthenticationToken(principal, credentials, realm, scheme, parameters);
     }
 }
