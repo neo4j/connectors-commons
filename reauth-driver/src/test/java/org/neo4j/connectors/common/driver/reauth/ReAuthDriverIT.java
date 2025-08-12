@@ -16,6 +16,7 @@
  */
 package org.neo4j.connectors.common.driver.reauth;
 
+import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
@@ -66,7 +67,7 @@ public class ReAuthDriverIT {
     @SuppressWarnings("resource")
     private static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(
                     Optional.ofNullable(System.getProperty("neo4j-connectors-commons.default-neo4j-image"))
-                            .or(() -> Optional.of("neo4j:5.26.9"))
+                            .or(() -> Optional.of("neo4j:5.26"))
                             .map(v -> !v.contains("-enterprise") ? v + "-enterprise" : v)
                             .orElseThrow())
             .waitingFor(Neo4jContainer.WAIT_FOR_BOLT)
@@ -102,7 +103,7 @@ public class ReAuthDriverIT {
         NEO4J.start();
 
         var authzConfiguration = new Configuration(
-                String.format("http://%s:%d", KEYCLOAK.getHost(), KEYCLOAK.getHttpPort()),
+                format("http://%s:%d", KEYCLOAK.getHost(), KEYCLOAK.getHttpPort()),
                 "neo4j-sso-test",
                 "neo4j-commons-client",
                 Map.of("secret", "QNrSpbh0mxhnlYlI21UcBaz3Htb734vi"),
@@ -155,12 +156,20 @@ public class ReAuthDriverIT {
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
-            assertThat(driversLog).hasSize(1);
+            assertThat(driversLog)
+                    .overridingErrorMessage(() -> format(
+                            "expected only one driver to be created before token expires, but was %d",
+                            driversLog.size()))
+                    .hasSize(1);
 
             await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
 
             func.accept(driver);
-            assertThat(driversLog).hasSize(2);
+            assertThat(driversLog)
+                    .overridingErrorMessage(() -> format(
+                            "expected only two drivers to be created after token expires, but was %d",
+                            driversLog.size()))
+                    .hasSize(2);
         }
     }
 
@@ -171,7 +180,11 @@ public class ReAuthDriverIT {
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
-            assertThat(driversLog).hasSize(1);
+            assertThat(driversLog)
+                    .overridingErrorMessage(() -> format(
+                            "expected only one driver to be created before token expires, but was %d",
+                            driversLog.size()))
+                    .hasSize(1);
 
             await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
 
@@ -191,7 +204,11 @@ public class ReAuthDriverIT {
                 executor.shutdownNow();
             }
 
-            assertThat(driversLog).hasSize(2);
+            assertThat(driversLog)
+                    .overridingErrorMessage(() -> format(
+                            "expected only two drivers to be created after token expires, but was %d",
+                            driversLog.size()))
+                    .hasSize(2);
         }
     }
 
@@ -203,12 +220,20 @@ public class ReAuthDriverIT {
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
             func.accept(driver);
-            assertThat(driversLog).hasSize(1);
+            assertThat(driversLog)
+                    .overridingErrorMessage(() -> format(
+                            "expected only two drivers to be created after token expires, but was %d",
+                            driversLog.size()))
+                    .hasSize(1);
 
             await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
 
             func.accept(driver);
-            assertThat(driversLog).hasSize(2);
+            assertThat(driversLog)
+                    .overridingErrorMessage(() -> format(
+                            "expected only two drivers to be created after token expires, but was %d",
+                            driversLog.size()))
+                    .hasSize(2);
 
             await().atMost(Duration.ofSeconds(1)).until(driver.expiredDrivers::isEmpty);
         }
