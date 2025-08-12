@@ -18,6 +18,7 @@ package org.neo4j.connectors.common.driver.reauth;
 
 import java.net.URI;
 import java.util.function.Supplier;
+import org.neo4j.connectors.authn.AuthenticationToken;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
 import org.neo4j.driver.*;
 
@@ -25,23 +26,27 @@ public final class ReAuthDriverFactory {
 
     private ReAuthDriverFactory() {}
 
-    public static Driver driver(String uri, Supplier<BearerAuthenticationToken> authTokenSupplier) {
+    public static Driver driver(String uri, Supplier<AuthenticationToken> authTokenSupplier) {
         return driver(URI.create(uri), authTokenSupplier, defaultConfig());
     }
 
-    public static Driver driver(URI uri, Supplier<BearerAuthenticationToken> authTokenSupplier) {
+    public static Driver driver(URI uri, Supplier<AuthenticationToken> authTokenSupplier) {
         return driver(uri, authTokenSupplier, defaultConfig());
     }
 
-    public static Driver driver(String uri, Supplier<BearerAuthenticationToken> authTokenSupplier, Config config) {
+    public static Driver driver(String uri, Supplier<AuthenticationToken> authTokenSupplier, Config config) {
         return driver(URI.create(uri), authTokenSupplier, config);
     }
 
-    public static Driver driver(URI uri, Supplier<BearerAuthenticationToken> authTokenSupplier, Config config) {
+    public static Driver driver(URI uri, Supplier<AuthenticationToken> authTokenSupplier, Config config) {
         return new ReAuthDriver(() -> {
             var authToken = authTokenSupplier.get();
-            var driver = GraphDatabase.driver(uri, AuthTokens.bearer(authToken.getToken()), config);
-            return new ExpiringDriver(driver, authToken.getExpiresAt());
+            if (!(authToken instanceof BearerAuthenticationToken)) {
+                throw new IllegalArgumentException("Only BearerAuthenticationToken is supported");
+            }
+            var bearerToken = (BearerAuthenticationToken) authToken;
+            var driver = GraphDatabase.driver(uri, AuthTokens.bearer(bearerToken.getToken()), config);
+            return new ExpiringDriver(driver, bearerToken.getExpiresAt());
         });
     }
 
