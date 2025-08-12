@@ -41,12 +41,15 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
 import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
 import org.neo4j.driver.*;
+import org.neo4j.driver.async.ResultCursor;
 import org.neo4j.driver.reactive.RxSession;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 
 @Testcontainers(disabledWithoutDocker = true)
 public class ReAuthDriverIT {
@@ -236,6 +239,69 @@ public class ReAuthDriverIT {
                     .hasSize(2);
 
             await().atMost(Duration.ofSeconds(1)).until(driver.expiredDrivers::isEmpty);
+        }
+    }
+
+    @Test
+    void sessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+            try (var session = driver.session()) {
+                var expectedTimestamp = System.currentTimeMillis();
+                var params = Map.<String, Object>of("ts", expectedTimestamp);
+
+                await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+
+                var actualTimestamp =
+                        session.writeTransaction(tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+                                .single()
+                                .get(0)
+                                .asLong());
+                assertThat(actualTimestamp).isEqualTo(expectedTimestamp);
+            }
+        }
+    }
+
+    @Test
+    void rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+            var expectedTimestamp = System.currentTimeMillis();
+            var params = Map.<String, Object>of("ts", expectedTimestamp);
+
+            var actual = Flux.usingWhen(
+                            Mono.just(driver.rxSession())
+                                    .zipWhen(s -> Mono.delay(TOKEN_LIFESPAN_GUARANTEED))
+                                    .map(Tuple2::getT1),
+                            rxSession -> Flux.from(rxSession.writeTransaction(
+                                    tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+                                            .records())),
+                            RxSession::close)
+                    .blockFirst();
+            assertThat(actual.get(0).asLong()).isEqualTo(expectedTimestamp);
+        }
+    }
+
+    @Test
+    void asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires() throws ExecutionException, InterruptedException {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+            var expectedTimestamp = System.currentTimeMillis();
+            var params = Map.<String, Object>of("ts", expectedTimestamp);
+
+            var asyncSession = driver.asyncSession();
+            var actual = asyncSession
+                    .writeTransactionAsync(tx -> {
+                        await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+                        return tx.runAsync("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+                                .thenCompose(ResultCursor::singleAsync)
+                                .thenApply(r -> r.get(0).asLong());
+                    })
+                    .whenComplete((result, error) -> asyncSession.closeAsync())
+                    .toCompletableFuture()
+                    .get();
+
+            assertThat(actual).isEqualTo(expectedTimestamp);
         }
     }
 
