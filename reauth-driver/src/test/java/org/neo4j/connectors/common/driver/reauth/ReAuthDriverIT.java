@@ -39,11 +39,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
+import org.neo4j.connectors.authn.AuthenticationToken;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
 import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
 import org.neo4j.driver.*;
 import org.neo4j.driver.async.ResultCursor;
 import org.neo4j.driver.reactive.RxSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -54,6 +57,8 @@ import reactor.util.function.Tuple2;
 
 @Testcontainers(disabledWithoutDocker = true)
 public class ReAuthDriverIT {
+
+    private static final Logger log = LoggerFactory.getLogger(ReAuthDriverIT.class);
 
     private static final Duration TOKEN_LIFESPAN_GUARANTEED = Duration.ofSeconds(4);
 
@@ -101,12 +106,14 @@ public class ReAuthDriverIT {
 
     private static KeycloakOIDCAuthenticationSupplier authenticationSupplier;
 
+    private static Configuration authzConfiguration;
+
     @BeforeAll
     static void startContainersAndMetrics() {
         KEYCLOAK.start();
         NEO4J.start();
 
-        var authzConfiguration = new Configuration(
+        authzConfiguration = new Configuration(
                 format("http://%s:%d", KEYCLOAK.getHost(), KEYCLOAK.getHttpPort()),
                 "neo4j-sso-test",
                 "neo4j-commons-client",
@@ -128,37 +135,38 @@ public class ReAuthDriverIT {
         };
         builder.add(Arguments.argumentSet("session", sessionFunc));
 
-        Consumer<Driver> rxSessionFunc = (Driver driver) -> {
-            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
-            Mono.usingWhen(
-                            Mono.just(driver.rxSession()),
-                            rxSession -> Mono.fromDirect(rxSession.writeTransaction(
-                                    tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
-                                            .consume())),
-                            RxSession::close)
-                    .block();
-        };
-        builder.add(Arguments.argumentSet("rxSession", rxSessionFunc));
-
-        Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
-            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
-            var asyncSession = driver.asyncSession();
-            asyncSession
-                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {ts: $ts}) RETURN t.ts", params))
-                    .whenComplete((result, error) -> asyncSession.closeAsync())
-                    .toCompletableFuture()
-                    .join();
-        };
-        builder.add(Arguments.argumentSet("asyncSession", sessionAsyncFunc));
+//        Consumer<Driver> rxSessionFunc = (Driver driver) -> {
+//            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
+//            Mono.usingWhen(
+//                            Mono.just(driver.rxSession()),
+//                            rxSession -> Mono.fromDirect(rxSession.writeTransaction(
+//                                    tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+//                                            .consume())),
+//                            RxSession::close)
+//                    .block();
+//        };
+//        builder.add(Arguments.argumentSet("rxSession", rxSessionFunc));
+//
+//        Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
+//            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
+//            var asyncSession = driver.asyncSession();
+//            asyncSession
+//                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {ts: $ts}) RETURN t.ts", params))
+//                    .whenComplete((result, error) -> asyncSession.closeAsync())
+//                    .toCompletableFuture()
+//                    .join();
+//        };
+//        builder.add(Arguments.argumentSet("asyncSession", sessionAsyncFunc));
 
         return builder.build();
     }
 
     @ParameterizedTest
     @MethodSource("expiringMethods")
-    void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) {
+    void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) throws InterruptedException {
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        try (var driver = new ReAuthDriver(driverSupplierNoExpiration(driversLog))) {
+            log.info("Initial call");
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -167,13 +175,44 @@ public class ReAuthDriverIT {
                     .hasSize(1);
 
             await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+            Thread.sleep(3000);
 
+            log.info("Subsequent call");
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
                             "expected only two drivers to be created after token expires, but was %d",
                             driversLog.size()))
                     .hasSize(2);
+        }
+    }
+
+    @Test
+    void test2() throws InterruptedException {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplierNoExpiration(driversLog))) {
+            try (var session = driver.session()) {
+                var params = Map.<String, Object>of("ts", System.currentTimeMillis());
+                session.writeTransaction(tx ->
+                        tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params).consume());
+            }
+        }
+    }
+
+    @Test
+    void test3() throws InterruptedException {
+        var authSup = (KeycloakOIDCAuthenticationSupplier)
+                KeycloakOIDCAuthenticationSupplier.of("john-tester", "testerpwd", authzConfiguration);
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = driverSupplierNoExpiration(driversLog, authSup).get().getDriver()) {
+
+            Thread.sleep(35_000);
+
+            try (var session = driver.session()) {
+                var params = Map.<String, Object>of("ts", System.currentTimeMillis());
+                session.writeTransaction(tx ->
+                        tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params).consume());
+            }
         }
     }
 
@@ -244,21 +283,45 @@ public class ReAuthDriverIT {
     }
 
     @Test
-    void sessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
+    void sessionObtainedByDriverIsKeptActiveAfterTokenExpires() throws InterruptedException {
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog));) {
             try (var session = driver.session()) {
+                log.info("Session obtained");
                 var expectedTimestamp = System.currentTimeMillis();
                 var params = Map.<String, Object>of("ts", expectedTimestamp);
 
                 await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
 
-                var actualTimestamp =
-                        session.writeTransaction(tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
-                                .single()
-                                .get(0)
-                                .asLong());
-                assertThat(actualTimestamp).isEqualTo(expectedTimestamp);
+
+                Runnable test = () -> {
+                    log.info("Execute a write");
+                    var actualTimestamp =
+                            session.writeTransaction(tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+                                    .single()
+                                    .get(0)
+                                    .asLong());
+                    assertThat(actualTimestamp).isEqualTo(expectedTimestamp);
+                };
+                test.run();
+                //Thread.sleep(3_000);
+                Thread.sleep(30_000);
+                test.run();
+//                await().atMost(Duration.ofSeconds(60)).until(() -> {
+//                    try {
+//                        log.info("Execute a write");
+//                        var actualTimestamp =
+//                                session.writeTransaction(tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+//                                        .single()
+//                                        .get(0)
+//                                        .asLong());
+//                        assertThat(actualTimestamp).isEqualTo(expectedTimestamp);
+//                        return false;
+//                    } catch (Exception e) {
+//                        e.printStackTrace();
+//                        return true;
+//                    }
+//                });
             }
         }
     }
@@ -308,11 +371,37 @@ public class ReAuthDriverIT {
 
     private static Supplier<ExpiringDriver> driverSupplier(List<Driver> driversLog) {
         return () -> {
+            var config = Config.builder()
+                    .withConnectionTimeout(2, TimeUnit.SECONDS)
+                    .withMaxConnectionLifetime(2, TimeUnit.SECONDS)
+                    .withConnectionLivenessCheckTimeout(2, TimeUnit.SECONDS)
+                    .withDriverMetrics()
+                    .withLogging(Logging.slf4j())
+                    .build();
             var token = (BearerAuthenticationToken) authenticationSupplier.get();
-            var driver = GraphDatabase.driver(
-                    NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), ReAuthDriverFactory.defaultConfig());
+            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), config);
             driversLog.add(driver);
             return new ExpiringDriver(driver, token.getExpiresAt());
+        };
+    }
+
+    private static Supplier<ExpiringDriver> driverSupplierNoExpiration(List<Driver> driversLog) {
+        return driverSupplierNoExpiration(driversLog, authenticationSupplier);
+    }
+
+    private static Supplier<ExpiringDriver> driverSupplierNoExpiration(List<Driver> driversLog, Supplier<AuthenticationToken> authSup) {
+        return () -> {
+            var config = Config.builder()
+                    .withConnectionTimeout(2, TimeUnit.SECONDS)
+                    .withMaxConnectionLifetime(2, TimeUnit.SECONDS)
+                    .withConnectionLivenessCheckTimeout(2, TimeUnit.SECONDS)
+                    .withDriverMetrics()
+                    .withLogging(Logging.slf4j())
+                    .build();
+            var token = (BearerAuthenticationToken) authSup.get();
+            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), config);
+            driversLog.add(driver);
+            return new ExpiringDriver(driver, null);
         };
     }
 

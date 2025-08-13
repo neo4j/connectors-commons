@@ -18,24 +18,32 @@ package org.neo4j.connectors.common.driver.reauth;
 
 import java.util.List;
 import java.util.concurrent.*;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.function.Function;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import org.neo4j.driver.*;
+
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.Metrics;
+import org.neo4j.driver.Session;
+import org.neo4j.driver.SessionConfig;
 import org.neo4j.driver.async.AsyncSession;
-import org.neo4j.driver.exceptions.TokenExpiredException;
+import org.neo4j.driver.exceptions.AuthenticationException;
+import org.neo4j.driver.exceptions.AuthorizationExpiredException;
 import org.neo4j.driver.reactive.RxSession;
 import org.neo4j.driver.types.TypeSystem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ReAuthDriver implements Driver {
+
+    private static final Logger log = LoggerFactory.getLogger(ReAuthDriver.class);
 
     private static final long DEFAULT_CLEANUP_INTERVAL_MILLIS = 5 * 60 * 1000L;
 
     private final Supplier<ExpiringDriver> driverFactory;
 
     private ExpiringDriver currentDriver;
-    private final ReentrantReadWriteLock currentDriverLock = new ReentrantReadWriteLock();
+    private final ReentrantLock currentDriverLock = new ReentrantLock();
 
     final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService cleanupExecutor;
@@ -76,7 +84,10 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public Session session(SessionConfig sessionConfig) {
-        return checkExpiration((Driver driver) -> driver.session(sessionConfig));
+        return checkExpiration(() ->
+                new ReAuthSession(this, () ->
+                        this.currentDriver.getDriver().session(sessionConfig))
+        );
     }
 
     @Override
@@ -86,7 +97,7 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public RxSession rxSession(SessionConfig sessionConfig) {
-        return checkExpiration((Driver driver) -> driver.rxSession(sessionConfig));
+        return checkExpiration(() -> this.currentDriver.getDriver().rxSession(sessionConfig));
     }
 
     @Override
@@ -96,7 +107,7 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public AsyncSession asyncSession(SessionConfig sessionConfig) {
-        return checkExpiration((Driver driver) -> driver.asyncSession(sessionConfig));
+        return checkExpiration(() -> this.currentDriver.getDriver().asyncSession(sessionConfig));
     }
 
     @Override
@@ -160,33 +171,57 @@ public class ReAuthDriver implements Driver {
         expiredDrivers.removeAll(driverWithNoConnections);
     }
 
-    private <T> T checkExpiration(Function<Driver, T> block) {
-        currentDriverLock.readLock().lock();
+    private <T> T checkExpiration(Supplier<T> block) {
         var latestDriverHashCode = System.identityHashCode(currentDriver.getDriver());
         if (currentDriver.isExpired()) {
-            currentDriverLock.readLock().unlock();
-            rotateCurrentDriver(latestDriverHashCode);
-            currentDriverLock.readLock().lock();
+            withLock(() -> rotateCurrentDriver(latestDriverHashCode));
         }
-        currentDriverLock.readLock().unlock();
+        return block.get();
+    }
+
+    <T> T withLock(Supplier<T> block) {
+        currentDriverLock.lock();
         try {
-            return block.apply(currentDriver.getDriver());
-        } catch (TokenExpiredException e) {
-            rotateCurrentDriver(latestDriverHashCode);
-            return block.apply(currentDriver.getDriver());
+            return block.get();
+        } finally {
+            currentDriverLock.unlock();
         }
     }
 
-    private void rotateCurrentDriver(int hashCode) {
-        currentDriverLock.writeLock().lock();
+    void withLock(Runnable block) {
+        currentDriverLock.lock();
         try {
-            // Verify hash code because the current driver may be updated by another thread
-            if (System.identityHashCode(currentDriver.getDriver()) == hashCode) {
-                expiredDrivers.add(currentDriver.getDriver());
-                currentDriver = driverFactory.get();
-            }
+            block.run();
         } finally {
-            currentDriverLock.writeLock().unlock();
+            currentDriverLock.unlock();
         }
+    }
+
+    <T> T withRefresh(Supplier<T> block, Runnable refresh) {
+        var driverHashCode = System.identityHashCode(currentDriver.getDriver());
+        try {
+            return block.get();
+        } catch (AuthenticationException e) {
+            withLock(() -> {
+                log.debug("Driver has expired, re-creating a new one");
+                if (rotateCurrentDriver(driverHashCode)) {
+                    refresh.run();
+                }
+            });
+            log.debug("Retrying");
+            return block.get();
+        }
+    }
+
+    boolean rotateCurrentDriver(int hashCode) {
+        log.debug("Rotating driver");
+        // Verify hash code because the current driver may be updated by another thread
+        if (System.identityHashCode(currentDriver.getDriver()) == hashCode) {
+            log.debug("Replacing current driver with new one");
+            expiredDrivers.add(currentDriver.getDriver());
+            currentDriver = driverFactory.get();
+            return true;
+        }
+        return false;
     }
 }
