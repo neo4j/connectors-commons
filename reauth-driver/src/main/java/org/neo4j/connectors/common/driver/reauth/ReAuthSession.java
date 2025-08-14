@@ -1,12 +1,10 @@
 package org.neo4j.connectors.common.driver.reauth;
 
 import org.neo4j.driver.*;
-import org.neo4j.driver.exceptions.AuthenticationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static java.util.Collections.emptyMap;
@@ -53,13 +51,6 @@ class ReAuthSession implements Session {
     @Override
     public <T> T writeTransaction(TransactionWork<T> work, TransactionConfig config) {
         return withExpiringSession(() -> this.delegate.writeTransaction(work, config) );
-    }
-
-    private <T> T withExpiringSession(Supplier<T> block) {
-        return driver.withRefresh(block, () -> {
-           log.info("Re-creating session");
-           delegate = sessionSupplier.get();
-        });
     }
 
     @Override
@@ -121,5 +112,14 @@ class ReAuthSession implements Session {
     @Override
     public boolean isOpen() {
         return delegate.isOpen();
+    }
+
+    private <T> T withExpiringSession(Supplier<T> block) {
+        return driver.withRefresh(block, () -> {
+            log.info("Re-creating session");
+            var oldSession = delegate;
+            delegate = sessionSupplier.get();
+            oldSession.close();
+        });
     }
 }

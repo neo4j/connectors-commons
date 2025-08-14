@@ -204,24 +204,21 @@ public class ReAuthDriver implements Driver {
         } catch (AuthenticationException e) {
             withLock(() -> {
                 log.debug("Driver has expired, re-creating a new one");
-                if (rotateCurrentDriver(driverHashCode)) {
-                    refresh.run();
-                }
+                rotateCurrentDriver(driverHashCode);
+                refresh.run();
             });
             log.debug("Retrying");
             return block.get();
         }
     }
 
-    boolean rotateCurrentDriver(int hashCode) {
+    void rotateCurrentDriver(int hashCode) {
         log.debug("Rotating driver");
         // Verify hash code because the current driver may be updated by another thread
         if (System.identityHashCode(currentDriver.getDriver()) == hashCode) {
             log.debug("Replacing current driver with new one");
             expiredDrivers.add(currentDriver.getDriver());
             currentDriver = driverFactory.get();
-            return true;
         }
-        return false;
     }
 }
