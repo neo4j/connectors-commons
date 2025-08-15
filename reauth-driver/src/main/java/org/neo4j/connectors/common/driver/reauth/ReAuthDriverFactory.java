@@ -20,8 +20,18 @@ import static java.lang.String.format;
 
 import java.net.URI;
 import java.util.function.Supplier;
-import org.neo4j.connectors.authn.*;
-import org.neo4j.driver.*;
+import org.neo4j.connectors.authn.AuthenticationToken;
+import org.neo4j.connectors.authn.BearerAuthenticationToken;
+import org.neo4j.connectors.authn.CustomAuthenticationToken;
+import org.neo4j.connectors.authn.DisabledAuthenticationToken;
+import org.neo4j.connectors.authn.ExpiringAuthenticationToken;
+import org.neo4j.connectors.authn.KerberosAuthenticationToken;
+import org.neo4j.connectors.authn.UserNameAndPasswordAuthenticationToken;
+import org.neo4j.driver.AuthToken;
+import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.Config;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.GraphDatabase;
 
 public final class ReAuthDriverFactory {
 

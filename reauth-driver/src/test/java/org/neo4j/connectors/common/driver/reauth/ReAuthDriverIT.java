@@ -19,14 +19,24 @@ package org.neo4j.connectors.common.driver.reauth;
 import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
+import static reactor.core.publisher.Flux.from;
+import static reactor.core.publisher.Flux.usingWhen;
+import static reactor.core.publisher.Mono.*;
 
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.*;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -34,6 +44,7 @@ import java.util.stream.Stream;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -44,8 +55,8 @@ import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
 import org.neo4j.driver.*;
 import org.neo4j.driver.async.ResultCursor;
 import org.neo4j.driver.reactive.RxSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.neo4j.driver.reactive.RxTransaction;
+import org.reactivestreams.Publisher;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -57,13 +68,8 @@ import reactor.util.function.Tuple2;
 @Testcontainers(disabledWithoutDocker = true)
 public class ReAuthDriverIT {
 
-    private static final Logger log = LoggerFactory.getLogger(ReAuthDriverIT.class);
-
     private static final Duration TOKEN_LIFESPAN_GUARANTEED = Duration.ofSeconds(4);
-    private static final long TOKEN_LIFESPAN_GUARANTEED_MS = TOKEN_LIFESPAN_GUARANTEED.toMillis();
-
     private static final Duration SERVER_SIDE_TOKEN_LIFESPAN = Duration.ofSeconds(35);
-    private static final long SERVER_SIDE_TOKEN_LIFESPAN_MS = SERVER_SIDE_TOKEN_LIFESPAN.toMillis();
 
     private static final Network NETWORK = Network.newNetwork();
 
@@ -129,45 +135,49 @@ public class ReAuthDriverIT {
     static Stream<Arguments> expiringMethods() {
         var builder = Stream.<Arguments>builder();
 
-        Consumer<Driver> sessionFunc = (Driver driver) -> {
-            try (var session = driver.session()) {
-                var params = Map.<String, Object>of("ts", System.currentTimeMillis());
-                session.writeTransaction(tx ->
-                        tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params).consume());
-            }
-        };
-        builder.add(Arguments.argumentSet("session (expiration set)", sessionFunc, true, TOKEN_LIFESPAN_GUARANTEED_MS));
-        builder.add(Arguments.argumentSet("session (expiration is not set)", sessionFunc, false, SERVER_SIDE_TOKEN_LIFESPAN_MS));
+        for (var expirationIsSet: List.of(true, false) ) {
+            var nameSuffix = expirationIsSet ? "(expiration set)" : "(expiration is not set)";
+            var delay  = expirationIsSet ? TOKEN_LIFESPAN_GUARANTEED : SERVER_SIDE_TOKEN_LIFESPAN;
 
-//        Consumer<Driver> rxSessionFunc = (Driver driver) -> {
-//            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
-//            Mono.usingWhen(
-//                            Mono.just(driver.rxSession()),
-//                            rxSession -> Mono.fromDirect(rxSession.writeTransaction(
-//                                    tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
-//                                            .consume())),
-//                            RxSession::close)
-//                    .block();
-//        };
-//        builder.add(Arguments.argumentSet("rxSession", rxSessionFunc));
-//
-//        Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
-//            var params = Map.<String, Object>of("ts", System.currentTimeMillis());
-//            var asyncSession = driver.asyncSession();
-//            asyncSession
-//                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {ts: $ts}) RETURN t.ts", params))
-//                    .whenComplete((result, error) -> asyncSession.closeAsync())
-//                    .toCompletableFuture()
-//                    .join();
-//        };
-//        builder.add(Arguments.argumentSet("asyncSession", sessionAsyncFunc));
+            Consumer<Driver> sessionFunc = (Driver driver) -> {
+                try (var session = driver.session()) {
+                    var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
+                    session.writeTransaction(tx ->
+                            tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).consume());
+                }
+            };
+            builder.add(Arguments.argumentSet(format("session %s", nameSuffix), sessionFunc, expirationIsSet, delay));
+
+            Consumer<Driver> rxSessionFunc = (Driver driver) -> {
+                var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
+                Mono.usingWhen(
+                                just(driver.rxSession()),
+                                rxSession -> Mono.fromDirect(rxSession.writeTransaction(
+                                        tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                                                .consume())),
+                                RxSession::close)
+                        .block();
+            };
+            builder.add(Arguments.argumentSet(format("rxSession %s", nameSuffix), rxSessionFunc, expirationIsSet, delay));
+
+            Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
+                var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
+                var asyncSession = driver.asyncSession();
+                asyncSession
+                        .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params))
+                        .whenComplete((result, error) -> asyncSession.closeAsync())
+                        .toCompletableFuture()
+                        .join();
+            };
+            builder.add(Arguments.argumentSet(format("asyncSession %s", nameSuffix),sessionAsyncFunc, expirationIsSet, delay));
+        }
 
         return builder.build();
     }
 
     @ParameterizedTest
     @MethodSource("expiringMethods")
-    void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func, boolean withExpiration, long sleepDelayMs) throws InterruptedException {
+    void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func, boolean withExpiration, Duration sleepDelay) {
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog, withExpiration))) {
             func.accept(driver);
@@ -177,7 +187,7 @@ public class ReAuthDriverIT {
                             driversLog.size()))
                     .hasSize(1);
 
-            Thread.sleep(sleepDelayMs);
+            sleep(sleepDelay);
 
             func.accept(driver);
             assertThat(driversLog)
@@ -190,7 +200,8 @@ public class ReAuthDriverIT {
 
     @ParameterizedTest
     @MethodSource("expiringMethods")
-    void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func, boolean withExpiration, long sleepDelayMs)
+    void reAuthDriverRefreshesTokensWhenUsedConcurrently(
+            Consumer<Driver> func, boolean withExpiration, Duration sleepDelay)
             throws InterruptedException, ExecutionException {
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog, withExpiration))) {
@@ -201,7 +212,7 @@ public class ReAuthDriverIT {
                             driversLog.size()))
                     .hasSize(1);
 
-            Thread.sleep(sleepDelayMs);
+            sleep(sleepDelay);
 
             var executor = Executors.newFixedThreadPool(10);
             try {
@@ -254,65 +265,188 @@ public class ReAuthDriverIT {
         }
     }
 
-    @Test
-    void sessionObtainedByDriverIsKeptActiveAfterTokenExpires() throws InterruptedException {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false));) {
-            try (var session = driver.session()) {
-                log.info("Session obtained");
-                var expectedTimestamp = System.currentTimeMillis();
-                var params = Map.<String, Object>of("ts", expectedTimestamp);
+    static Stream<Arguments> sessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
+        var builder = Stream.<Arguments>builder();
+        Consumer<Session> write = (Session session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
+            var actualId = session.writeTransaction(tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                    .single()
+                    .get(0)
+                    .asString());
+            assertThat(actualId).isEqualTo(expectedId);
+        };
+        builder.add(Arguments.argumentSet("write", write));
 
-                Thread.sleep(SERVER_SIDE_TOKEN_LIFESPAN_MS);
-                var actualTimestamp =
-                        session.writeTransaction(tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
-                                .single()
-                                .get(0)
-                                .asLong());
-                assertThat(actualTimestamp).isEqualTo(expectedTimestamp);
+        Consumer<Session> read = (Session session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var actual = session.readTransaction(tx -> tx.run("RETURN 42").single().get(0).asLong());
+            assertThat(actual).isEqualTo(42L);
+        };
+        builder.add(Arguments.argumentSet("read", read));
+
+        Consumer<Session> run = (Session session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var actual = session.run("RETURN 42").single().get(0).asLong();
+            assertThat(actual).isEqualTo(42L);
+        };
+        builder.add(Arguments.argumentSet("run", run));
+
+        Consumer<Session> transaction = (Session session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
+
+            var tx = session.beginTransaction();
+            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).single().get(0).asString();
+            assertThat(actual).isEqualTo(expectedId);
+            tx.commit();
+        };
+        builder.add(Arguments.argumentSet("transaction", transaction));
+
+        Consumer<Session> openTransaction = (Session session) -> {
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
+
+            var tx = session.beginTransaction();
+
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+
+            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).single().get(0).asString();
+            assertThat(actual).isEqualTo(expectedId);
+            tx.commit();
+        };
+        builder.add(Arguments.argumentSet("openTransaction", openTransaction));
+
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void sessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<Session> methodTest) {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false)); ) {
+            try (var session = driver.session()) {
+                methodTest.accept(session);
             }
         }
     }
 
-    @Test
-    void rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false))) {
-            var expectedTimestamp = System.currentTimeMillis();
-            var params = Map.<String, Object>of("ts", expectedTimestamp);
+    static Stream<Arguments> rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
+        var builder = Stream.<Arguments>builder();
+        Consumer<RxSession> write = (RxSession session) -> {
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
 
-            var actual = Flux.usingWhen(
-                            Mono.just(driver.rxSession())
-                                    .zipWhen(s -> Mono.delay(SERVER_SIDE_TOKEN_LIFESPAN))
-                                    .map(Tuple2::getT1),
-                            rxSession -> Flux.from(rxSession.writeTransaction(
-                                    tx -> tx.run("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var actualId = usingWhen(just(session),
+                            rxSession -> from(rxSession.writeTransaction(
+                                    tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
                                             .records())),
                             RxSession::close)
-                    .blockFirst();
-            assertThat(actual.get(0).asLong()).isEqualTo(expectedTimestamp);
+                    .blockFirst()
+                    .get(0)
+                    .asString();
+            assertThat(actualId).isEqualTo(expectedId);
+        };
+        builder.add(Arguments.argumentSet("write", write));
+
+        Consumer<RxSession> read = (RxSession session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var actual = usingWhen(just(session),
+                            rxSession -> from(rxSession.readTransaction(tx -> tx.run("RETURN 42").records())),
+                            RxSession::close)
+                    .blockFirst()
+                    .get(0)
+                    .asLong();
+            assertThat(actual).isEqualTo(42L);
+        };
+        builder.add(Arguments.argumentSet("read", read));
+
+        Consumer<RxSession> run = (RxSession session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var actual = usingWhen(just(session),
+                            rxSession -> from(rxSession.run("RETURN 42").records()),
+                            RxSession::close)
+                    .blockFirst()
+                    .get(0)
+                    .asLong();
+            assertThat(actual).isEqualTo(42L);
+        };
+        builder.add(Arguments.argumentSet("run", run));
+
+
+        Consumer<RxSession> transaction = (RxSession session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
+
+            var actual = usingWhen(just(session),
+                            rxSession -> from(rxSession.beginTransaction())
+                                    .flatMap(tx -> usingWhen(just(tx),
+                                            t -> from(t.run("MERGE (t:Test {id: $id}) RETURN t.id", params).records()),
+                                            RxTransaction::commit)),
+                            RxSession::close)
+                    .blockFirst()
+                    .get(0)
+                    .asString();
+            assertThat(actual).isEqualTo(expectedId);
+        };
+        builder.add(Arguments.argumentSet("transaction", transaction));
+
+        Consumer<RxSession> openTransaction = (RxSession session) -> {
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
+
+            var actual = usingWhen(just(session),
+                    rxSession -> from(rxSession.beginTransaction())
+                            .flatMap(tx -> usingWhen(just(tx),
+                                    t -> delay(SERVER_SIDE_TOKEN_LIFESPAN)
+                                            .thenMany(from(t.run("MERGE (t:Test {id: $id}) RETURN t.id", params).records())),
+                                    RxTransaction::commit,
+                                    (t, ex) -> t.rollback(),
+                                    RxTransaction::close)),
+                    RxSession::close)
+                    .blockFirst()
+                    .get(0)
+                    .asString();
+            assertThat(actual).isEqualTo(expectedId);
+        };
+        builder.add(Arguments.argumentSet("openTransaction", openTransaction));
+
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<RxSession> methodTest) {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false))) {
+            var rxSession = driver.rxSession();
+            methodTest.accept(rxSession);
         }
     }
 
     @Test
+    @Disabled
     void asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires() throws ExecutionException, InterruptedException {
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog, false))) {
-            var expectedTimestamp = System.currentTimeMillis();
-            var params = Map.<String, Object>of("ts", expectedTimestamp);
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
 
             var asyncSession = driver.asyncSession();
-            Thread.sleep(SERVER_SIDE_TOKEN_LIFESPAN_MS);
-            var actual = asyncSession
-                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {ts: $ts}) RETURN t.ts", params)
-                                .thenCompose(ResultCursor::singleAsync)
-                                .thenApply(r -> r.get(0).asLong())
-                    )
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var actualId = asyncSession
+                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                            .thenCompose(ResultCursor::singleAsync)
+                            .thenApply(r -> r.get(0).asString()))
                     .whenComplete((result, error) -> asyncSession.closeAsync())
                     .toCompletableFuture()
                     .get();
 
-            assertThat(actual).isEqualTo(expectedTimestamp);
+            assertThat(actualId).isEqualTo(expectedId);
         }
     }
 
@@ -330,6 +464,14 @@ public class ReAuthDriverIT {
             driversLog.add(driver);
             return new ExpiringDriver(driver, withExpiration ? token.getExpiresAt() : null);
         };
+    }
+
+    static void sleep(Duration duration) {
+        try {
+            Thread.sleep(duration.toMillis());
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @AfterAll

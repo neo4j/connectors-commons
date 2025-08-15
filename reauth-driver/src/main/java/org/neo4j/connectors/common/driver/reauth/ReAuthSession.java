@@ -1,26 +1,44 @@
+/*
+ * Copyright (c) "Neo4j"
+ * Neo4j Sweden AB [https://neo4j.com]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.neo4j.connectors.common.driver.reauth;
 
+import static java.util.Collections.emptyMap;
+import static org.neo4j.driver.internal.AbstractQueryRunner.*;
+
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.neo4j.driver.*;
+import org.neo4j.driver.internal.AbstractQueryRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-import java.util.function.Supplier;
-
-import static java.util.Collections.emptyMap;
-
 class ReAuthSession implements Session {
 
-    private final static Logger log = LoggerFactory.getLogger(ReAuthSession.class);
+    private static final Logger log = LoggerFactory.getLogger(ReAuthSession.class);
 
-    private ReAuthDriver driver;
-    private Session delegate;
-    private Supplier<Session> sessionSupplier;
+    private final ReAuthDriver driver;
+    private final AtomicReference<Session> delegate = new AtomicReference<>();
+    private final Supplier<Session> sessionSupplier;
 
     ReAuthSession(ReAuthDriver driver, Supplier<Session> sessionSupplier) {
         this.driver = driver;
-        this.delegate = sessionSupplier.get();
         this.sessionSupplier = sessionSupplier;
+        this.delegate.set(sessionSupplier.get());
     }
 
     @Override
@@ -30,7 +48,7 @@ class ReAuthSession implements Session {
 
     @Override
     public Transaction beginTransaction(TransactionConfig config) {
-        return null; // todo
+        return withExpiringSession(() -> delegate.get().beginTransaction(config));
     }
 
     @Override
@@ -40,7 +58,7 @@ class ReAuthSession implements Session {
 
     @Override
     public <T> T readTransaction(TransactionWork<T> work, TransactionConfig config) {
-        return null; // todo
+        return withExpiringSession(() -> this.delegate.get().readTransaction(work, config));
     }
 
     @Override
@@ -50,12 +68,12 @@ class ReAuthSession implements Session {
 
     @Override
     public <T> T writeTransaction(TransactionWork<T> work, TransactionConfig config) {
-        return withExpiringSession(() -> this.delegate.writeTransaction(work, config) );
+        return withExpiringSession(() -> this.delegate.get().writeTransaction(work, config));
     }
 
     @Override
     public Result run(String query, TransactionConfig config) {
-        return run(new Query(query, emptyMap()), TransactionConfig.empty());
+        return run(new Query(query, emptyMap()), config);
     }
 
     @Override
@@ -65,61 +83,60 @@ class ReAuthSession implements Session {
 
     @Override
     public Result run(Query query, TransactionConfig config) {
-        return null;
+        return withExpiringSession(() -> this.delegate.get().run(query, config));
     }
 
     @Override
     public Bookmark lastBookmark() {
-        return null;
+        return delegate.get().lastBookmark(); // todo ??
     }
 
     @Deprecated
     @Override
     public void reset() {
-        delegate.reset();
+        delegate.get().reset();
     }
 
     @Override
     public void close() {
-        delegate.close();
+        delegate.get().close();
     }
 
     @Override
     public Result run(String query, Value parameters) {
-        return null;
+        return run(new Query(query, parameters), TransactionConfig.empty());
     }
 
     @Override
     public Result run(String query, Map<String, Object> parameters) {
-        return null;
+        return run(new Query(query, parameters), TransactionConfig.empty());
     }
 
     @Override
     public Result run(String query, Record parameters) {
-        return null;
+        return run(new Query(query, parameters(parameters)), TransactionConfig.empty());
     }
 
     @Override
     public Result run(String query) {
-        return null;
+        return run(new Query(query, emptyMap()), TransactionConfig.empty());
     }
 
     @Override
     public Result run(Query query) {
-        return null;
+        return run(query, TransactionConfig.empty());
     }
 
     @Override
     public boolean isOpen() {
-        return delegate.isOpen();
+        return delegate.get().isOpen();
     }
 
     private <T> T withExpiringSession(Supplier<T> block) {
         return driver.withRefresh(block, () -> {
             log.info("Re-creating session");
-            var oldSession = delegate;
-            delegate = sessionSupplier.get();
-            oldSession.close();
+            var oldSession = delegate.getAndSet(sessionSupplier.get());
+            oldSession.close(); // todo close quietly ?
         });
     }
 }

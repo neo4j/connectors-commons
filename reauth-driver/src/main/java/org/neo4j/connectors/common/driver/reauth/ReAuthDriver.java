@@ -21,18 +21,18 @@ import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Metrics;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.SessionConfig;
 import org.neo4j.driver.async.AsyncSession;
 import org.neo4j.driver.exceptions.AuthenticationException;
-import org.neo4j.driver.exceptions.AuthorizationExpiredException;
 import org.neo4j.driver.reactive.RxSession;
 import org.neo4j.driver.types.TypeSystem;
+import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 public class ReAuthDriver implements Driver {
 
@@ -86,8 +86,7 @@ public class ReAuthDriver implements Driver {
     public Session session(SessionConfig sessionConfig) {
         return checkExpiration(() ->
                 new ReAuthSession(this, () ->
-                        this.currentDriver.getDriver().session(sessionConfig))
-        );
+                        this.currentDriver.getDriver().session(sessionConfig)));
     }
 
     @Override
@@ -97,7 +96,9 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public RxSession rxSession(SessionConfig sessionConfig) {
-        return checkExpiration(() -> this.currentDriver.getDriver().rxSession(sessionConfig));
+        return checkExpiration(() ->
+                new ReAuthRxSession(this, () ->
+                        this.currentDriver.getDriver().rxSession(sessionConfig)));
     }
 
     @Override
@@ -179,15 +180,6 @@ public class ReAuthDriver implements Driver {
         return block.get();
     }
 
-    <T> T withLock(Supplier<T> block) {
-        currentDriverLock.lock();
-        try {
-            return block.get();
-        } finally {
-            currentDriverLock.unlock();
-        }
-    }
-
     void withLock(Runnable block) {
         currentDriverLock.lock();
         try {
@@ -207,9 +199,23 @@ public class ReAuthDriver implements Driver {
                 rotateCurrentDriver(driverHashCode);
                 refresh.run();
             });
-            log.debug("Retrying");
             return block.get();
         }
+    }
+
+    <T> Publisher<T> withRxRefresh(Supplier<Publisher<T>> block, Runnable refresh) {
+        return Mono.defer(() -> {
+            var driverHashCode = System.identityHashCode(currentDriver.getDriver());
+            return Mono.from(block.get())
+                    .onErrorResume(AuthenticationException.class, e ->
+                        Mono.fromRunnable(() -> withLock(() -> {
+                            log.debug("Driver has expired, re-creating a new one");
+                            rotateCurrentDriver(driverHashCode);
+                            refresh.run();
+                        }))
+                        .then(Mono.defer(() -> Mono.from(block.get())))
+                    );
+        });
     }
 
     void rotateCurrentDriver(int hashCode) {
