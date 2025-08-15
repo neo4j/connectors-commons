@@ -9,9 +9,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import static java.util.Collections.emptyMap;
@@ -78,7 +80,7 @@ public class ReAuthAsyncSession implements AsyncSession {
 
     @Override
     public Bookmark lastBookmark() {
-        return delegate.get().lastBookmark(); // todo
+        return delegate.get().lastBookmark();
     }
 
     @Override
@@ -113,13 +115,16 @@ public class ReAuthAsyncSession implements AsyncSession {
 
     private <T> CompletionStage<T> withExpiringAsyncSession(Supplier<CompletionStage<T>> block) {
         return driver.withRefreshAsync(block, () -> {
-            log.info("Re-creating session");
+            log.debug("Creating new session to replace expired one");
             var oldSession = delegate.getAndSet(sessionSupplier.get());
-            try {
-                oldSession.closeAsync().toCompletableFuture().get();
-            } catch (InterruptedException | ExecutionException e) {
-                log.debug( "Failed to close old session", e);
-            }
+            return oldSession.closeAsync()
+                    .handle((v, e) -> {
+                        if (e != null) {
+                            log.debug("Failed to close async session", e);
+                        }
+                        return CompletableFuture.completedStage(v);
+                    })
+                    .thenCompose(Function.identity());
         });
     }
 }

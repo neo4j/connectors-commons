@@ -80,7 +80,7 @@ public class ReAuthRxSession implements RxSession {
 
     @Override
     public Bookmark lastBookmark() {
-        return delegate.get().lastBookmark(); // todo
+        return delegate.get().lastBookmark();
     }
 
     @Override
@@ -119,10 +119,12 @@ public class ReAuthRxSession implements RxSession {
 
     <T> Publisher<T> withExpiringRxSession(Supplier<Publisher<T>> block, Runnable additionalRefresh) {
         return driver.withRxRefresh(block, () -> {
-            log.info("Re-creating session");
+            log.debug("Creating new session to replace expired one");
             var oldSession = delegate.getAndSet(sessionSupplier.get());
-            Mono.from(oldSession.close()).block(); // todo close quietly ?
-            additionalRefresh.run();
+            return Mono.from(oldSession.close())
+                    .then(Mono.<Void>fromRunnable(additionalRefresh))
+                    .doOnError(e -> log.debug("Failed to close reactive session", e))
+                    .onErrorComplete();
         });
     }
 

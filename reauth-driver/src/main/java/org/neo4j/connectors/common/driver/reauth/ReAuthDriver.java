@@ -116,7 +116,7 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public void close() {
-        expiredDrivers.forEach(Driver::close);
+        expiredDrivers.forEach(Utils::closeQuietly);
         currentDriver.getDriver().close();
         cleanupExecutor.shutdownNow();
     }
@@ -171,7 +171,7 @@ public class ReAuthDriver implements Driver {
                     return connectionPoolMetrics.stream().allMatch(m -> m.inUse() == 0);
                 })
                 .collect(Collectors.toList());
-        driverWithNoConnections.forEach(Driver::close);
+        driverWithNoConnections.forEach(Utils::closeQuietly);
         expiredDrivers.removeAll(driverWithNoConnections);
     }
 
@@ -198,7 +198,7 @@ public class ReAuthDriver implements Driver {
             return block.get();
         } catch (AuthenticationException e) {
             withLock(() -> {
-                log.debug("Driver has expired, re-creating a new one");
+                log.debug("Caught authentication exception. Try to refresh the driver and retry.");
                 rotateCurrentDriver(driverHashCode);
                 refresh.run();
             });
@@ -206,35 +206,35 @@ public class ReAuthDriver implements Driver {
         }
     }
 
-    <T> Publisher<T> withRxRefresh(Supplier<Publisher<T>> block, Runnable refresh) {
+    <T> Publisher<T> withRxRefresh(Supplier<Publisher<T>> block, Supplier<Publisher<Void>> refresh) {
         return Mono.defer(() -> {
             var driverHashCode = System.identityHashCode(currentDriver.getDriver());
             return Mono.from(block.get())
                     .onErrorResume(AuthenticationException.class, e ->
                         Mono.fromRunnable(() -> withLock(() -> {
-                            log.debug("Driver has expired, re-creating a new one");
+                            log.debug("Caught authentication exception. Try to refresh the driver and retry.");
                             rotateCurrentDriver(driverHashCode);
-                            refresh.run();
                         }))
+                        .then(Mono.defer(() -> Mono.from(refresh.get())))
                         .then(Mono.defer(() -> Mono.from(block.get())))
                     );
         });
     }
 
-    <T> CompletionStage<T> withRefreshAsync(Supplier<CompletionStage<T>> block, Runnable refresh) {
+    <T> CompletionStage<T> withRefreshAsync(Supplier<CompletionStage<T>> block, Supplier<CompletionStage<Void>> refresh) {
         var driverHashCode = System.identityHashCode(currentDriver.getDriver());
         return block.get()
                 .handle((value, e) -> {
-                    log.debug("Handling result of async block");
                     if (e == null) {
                         return CompletableFuture.completedStage(value);
                     }
                     if (e instanceof AuthenticationException || e.getCause() instanceof AuthenticationException) {
                         return CompletableFuture.runAsync(() -> withLock(() -> {
-                            log.debug("Driver has expired, re-creating a new one");
+                            log.debug("Caught authentication exception. Try to refresh the driver and retry.");
                             rotateCurrentDriver(driverHashCode);
-                            refresh.run();
-                        })).thenCompose(vd -> block.get());
+                        }))
+                        .thenCompose(vd -> refresh.get())
+                        .thenCompose(vd -> block.get());
                     }
                     return CompletableFuture.<T>failedStage(e);
                 })
@@ -242,10 +242,8 @@ public class ReAuthDriver implements Driver {
     }
 
     void rotateCurrentDriver(int hashCode) {
-        log.debug("Rotating driver");
         // Verify hash code because the current driver may be updated by another thread
         if (System.identityHashCode(currentDriver.getDriver()) == hashCode) {
-            log.debug("Replacing current driver with new one");
             expiredDrivers.add(currentDriver.getDriver());
             currentDriver = driverFactory.get();
         }

@@ -88,7 +88,7 @@ class ReAuthSession implements Session {
 
     @Override
     public Bookmark lastBookmark() {
-        return delegate.get().lastBookmark(); // todo ??
+        return delegate.get().lastBookmark();
     }
 
     @Deprecated
@@ -134,9 +134,8 @@ class ReAuthSession implements Session {
 
     private <T> T withExpiringSession(Supplier<T> block) {
         return driver.withRefresh(block, () -> {
-            log.info("Re-creating session");
-            var oldSession = delegate.getAndSet(sessionSupplier.get());
-            oldSession.close(); // todo close quietly ?
+            log.debug("Creating new session to replace expired one");
+            Utils.closeQuietly(delegate.getAndSet(sessionSupplier.get()));
         });
     }
 }
