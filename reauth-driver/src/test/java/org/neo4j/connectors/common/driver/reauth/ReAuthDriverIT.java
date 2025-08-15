@@ -59,7 +59,6 @@ import reactor.core.publisher.Mono;
 @Testcontainers(disabledWithoutDocker = true)
 public class ReAuthDriverIT {
 
-    private static final Duration TOKEN_LIFESPAN_GUARANTEED = Duration.ofSeconds(4);
     private static final Duration SERVER_SIDE_TOKEN_LIFESPAN = Duration.ofSeconds(35);
 
     private static final Network NETWORK = Network.newNetwork();
@@ -126,51 +125,46 @@ public class ReAuthDriverIT {
     static Stream<Arguments> expiringMethods() {
         var builder = Stream.<Arguments>builder();
 
-        for (var expirationIsSet: List.of(true, false) ) {
-            var nameSuffix = expirationIsSet ? "(expiration set)" : "(expiration is not set)";
-            var delay  = expirationIsSet ? TOKEN_LIFESPAN_GUARANTEED : SERVER_SIDE_TOKEN_LIFESPAN;
-
-            Consumer<Driver> sessionFunc = (Driver driver) -> {
-                try (var session = driver.session()) {
-                    var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
-                    session.writeTransaction(tx ->
-                            tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).consume());
-                }
-            };
-            builder.add(Arguments.argumentSet(format("session %s", nameSuffix), sessionFunc, expirationIsSet, delay));
-
-            Consumer<Driver> rxSessionFunc = (Driver driver) -> {
+        Consumer<Driver> sessionFunc = (Driver driver) -> {
+            try (var session = driver.session()) {
                 var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
-                Mono.usingWhen(
-                                just(driver.rxSession()),
-                                rxSession -> Mono.fromDirect(rxSession.writeTransaction(
-                                        tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
-                                                .consume())),
-                                RxSession::close)
-                        .block();
-            };
-            builder.add(Arguments.argumentSet(format("rxSession %s", nameSuffix), rxSessionFunc, expirationIsSet, delay));
+                session.writeTransaction(tx ->
+                        tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).consume());
+            }
+        };
+        builder.add(Arguments.argumentSet("session", sessionFunc));
 
-            Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
-                var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
-                var asyncSession = driver.asyncSession();
-                asyncSession
-                        .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params))
-                        .whenComplete((result, error) -> asyncSession.closeAsync())
-                        .toCompletableFuture()
-                        .join();
-            };
-            builder.add(Arguments.argumentSet(format("asyncSession %s", nameSuffix),sessionAsyncFunc, expirationIsSet, delay));
-        }
+        Consumer<Driver> rxSessionFunc = (Driver driver) -> {
+            var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
+            Mono.usingWhen(
+                            just(driver.rxSession()),
+                            rxSession -> Mono.fromDirect(rxSession.writeTransaction(
+                                    tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                                            .consume())),
+                            RxSession::close)
+                    .block();
+        };
+        builder.add(Arguments.argumentSet("rxSession", rxSessionFunc));
+
+        Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
+            var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
+            var asyncSession = driver.asyncSession();
+            asyncSession
+                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params))
+                    .whenComplete((result, error) -> asyncSession.closeAsync())
+                    .toCompletableFuture()
+                    .join();
+        };
+        builder.add(Arguments.argumentSet("asyncSession", sessionAsyncFunc));
 
         return builder.build();
     }
 
     @ParameterizedTest
     @MethodSource("expiringMethods")
-    void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func, boolean withExpiration, Duration sleepDelay) {
+    void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) {
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, withExpiration))) {
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -178,7 +172,7 @@ public class ReAuthDriverIT {
                             driversLog.size()))
                     .hasSize(1);
 
-            sleep(sleepDelay);
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
             func.accept(driver);
             assertThat(driversLog)
@@ -191,11 +185,10 @@ public class ReAuthDriverIT {
 
     @ParameterizedTest
     @MethodSource("expiringMethods")
-    void reAuthDriverRefreshesTokensWhenUsedConcurrently(
-            Consumer<Driver> func, boolean withExpiration, Duration sleepDelay)
+    void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func)
             throws InterruptedException, ExecutionException {
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, withExpiration))) {
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -203,7 +196,7 @@ public class ReAuthDriverIT {
                             driversLog.size()))
                     .hasSize(1);
 
-            sleep(sleepDelay);
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
             var executor = Executors.newFixedThreadPool(10);
             try {
@@ -235,7 +228,7 @@ public class ReAuthDriverIT {
         var func =
                 (Consumer<Driver>) expiringMethods().findFirst().orElseThrow().get()[0];
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, true), 500)) {
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -243,7 +236,7 @@ public class ReAuthDriverIT {
                             driversLog.size()))
                     .hasSize(1);
 
-            await().atMost(TOKEN_LIFESPAN_GUARANTEED).until(authenticationSupplier::currentTokenIsExpired);
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
             func.accept(driver);
             assertThat(driversLog)
@@ -317,7 +310,7 @@ public class ReAuthDriverIT {
     @MethodSource
     void sessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<Session> methodTest) {
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false)); ) {
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             try (var session = driver.session()) {
                 methodTest.accept(session);
             }
@@ -413,7 +406,7 @@ public class ReAuthDriverIT {
     @MethodSource
     void rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<RxSession> methodTest) {
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false))) {
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             var rxSession = driver.rxSession();
             methodTest.accept(rxSession);
         }
@@ -536,13 +529,13 @@ public class ReAuthDriverIT {
     @MethodSource
     void asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<AsyncSession> methodTest) {
         var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false))) {
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
             var asyncSession = driver.asyncSession();
             methodTest.accept(asyncSession);
         }
     }
 
-    private static Supplier<ExpiringDriver> driverSupplier(List<Driver> driversLog, boolean withExpiration) {
+    private static Supplier<Driver> driverSupplier(List<Driver> driversLog) {
         return () -> {
             var config = Config.builder()
                     .withConnectionTimeout(2, TimeUnit.SECONDS)
@@ -554,7 +547,7 @@ public class ReAuthDriverIT {
             var token = (BearerAuthenticationToken) authenticationSupplier.get();
             var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), config);
             driversLog.add(driver);
-            return new ExpiringDriver(driver, withExpiration ? token.getExpiresAt() : null);
+            return driver;
         };
     }
 
@@ -570,7 +563,6 @@ public class ReAuthDriverIT {
         return CompletableFuture.runAsync(() -> {}, CompletableFuture.delayedExecutor(duration.toMillis(), TimeUnit.MILLISECONDS));
     }
 
-
     @AfterAll
     static void cleanUp() {
         NEO4J.stop();
@@ -578,3 +570,4 @@ public class ReAuthDriverIT {
         NETWORK.close();
     }
 }
+

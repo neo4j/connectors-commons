@@ -57,16 +57,11 @@ public final class ReAuthDriverFactory {
             return originalDriver;
         }
 
-        Supplier<ExpiringDriver> refresher = () -> {
+        Supplier<Driver> refresher = () -> {
             var refreshedToken = authTokenSupplier.get();
-            var expiresAt = refreshedToken instanceof ExpiringAuthenticationToken
-                    ? ((ExpiringAuthenticationToken) refreshedToken).getExpiresAt()
-                    : null;
-            var driver = GraphDatabase.driver(uri, convertToAuthToken(refreshedToken), config);
-            return new ExpiringDriver(driver, expiresAt);
+            return GraphDatabase.driver(uri, convertToAuthToken(refreshedToken), config);
         };
-        var expiringToken = (ExpiringAuthenticationToken) authenticationToken;
-        return new ReAuthDriver(new ExpiringDriver(originalDriver, expiringToken.getExpiresAt()), refresher);
+        return new ReAuthDriver(originalDriver, refresher);
     }
 
     private static AuthToken convertToAuthToken(AuthenticationToken token) throws IllegalArgumentException {

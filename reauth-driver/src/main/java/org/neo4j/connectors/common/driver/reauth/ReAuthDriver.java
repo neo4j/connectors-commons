@@ -18,6 +18,7 @@ package org.neo4j.connectors.common.driver.reauth;
 
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -41,30 +42,30 @@ public class ReAuthDriver implements Driver {
 
     private static final long DEFAULT_CLEANUP_INTERVAL_MILLIS = 5 * 60 * 1000L;
 
-    private final Supplier<ExpiringDriver> driverFactory;
+    private final Supplier<Driver> driverFactory;
 
-    private ExpiringDriver currentDriver;
+    private final AtomicReference<Driver> currentDriver = new AtomicReference<>();
     private final ReentrantLock currentDriverLock = new ReentrantLock();
 
     final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService cleanupExecutor;
 
-    ReAuthDriver(ExpiringDriver currentDriver, Supplier<ExpiringDriver> driverFactory) {
+    ReAuthDriver(Driver currentDriver, Supplier<Driver> driverFactory) {
         this(currentDriver, driverFactory, DEFAULT_CLEANUP_INTERVAL_MILLIS);
     }
 
-    ReAuthDriver(Supplier<ExpiringDriver> driverFactory) {
+    ReAuthDriver(Supplier<Driver> driverFactory) {
         this(driverFactory.get(), driverFactory, DEFAULT_CLEANUP_INTERVAL_MILLIS);
     }
 
-    ReAuthDriver(Supplier<ExpiringDriver> driverFactory, long cleanupIntervalMillis) {
+    ReAuthDriver(Supplier<Driver> driverFactory, long cleanupIntervalMillis) {
         this(driverFactory.get(), driverFactory, cleanupIntervalMillis);
     }
 
-    ReAuthDriver(ExpiringDriver currentDriver, Supplier<ExpiringDriver> driverFactory, long cleanupIntervalMillis) {
+    ReAuthDriver(Driver currentDriver, Supplier<Driver> driverFactory, long cleanupIntervalMillis) {
         this.driverFactory = driverFactory;
-        this.currentDriver = currentDriver;
-        if (!currentDriver.getDriver().isMetricsEnabled()) {
+        this.currentDriver.set(currentDriver);
+        if (!currentDriver.isMetricsEnabled()) {
             throw new IllegalArgumentException("Driver must be configured with metrics enabled");
         }
 
@@ -75,7 +76,7 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public boolean isEncrypted() {
-        return currentDriver.getDriver().isEncrypted();
+        return currentDriver.get().isEncrypted();
     }
 
     @Override
@@ -87,7 +88,7 @@ public class ReAuthDriver implements Driver {
     public Session session(SessionConfig sessionConfig) {
         return checkExpiration(() ->
                 new ReAuthSession(this, () ->
-                        this.currentDriver.getDriver().session(sessionConfig)));
+                        this.currentDriver.get().session(sessionConfig)));
     }
 
     @Override
@@ -99,7 +100,7 @@ public class ReAuthDriver implements Driver {
     public RxSession rxSession(SessionConfig sessionConfig) {
         return checkExpiration(() ->
                 new ReAuthRxSession(this, () ->
-                        this.currentDriver.getDriver().rxSession(sessionConfig)));
+                        this.currentDriver.get().rxSession(sessionConfig)));
     }
 
     @Override
@@ -111,19 +112,19 @@ public class ReAuthDriver implements Driver {
     public AsyncSession asyncSession(SessionConfig sessionConfig) {
         return checkExpiration(() ->
                 new ReAuthAsyncSession(this, () ->
-                        this.currentDriver.getDriver().asyncSession(sessionConfig)));
+                        this.currentDriver.get().asyncSession(sessionConfig)));
     }
 
     @Override
     public void close() {
         expiredDrivers.forEach(Utils::closeQuietly);
-        currentDriver.getDriver().close();
+        currentDriver.get().close();
         cleanupExecutor.shutdownNow();
     }
 
     @Override
     public CompletionStage<Void> closeAsync() {
-        var closeAsync = currentDriver.getDriver().closeAsync();
+        var closeAsync = currentDriver.get().closeAsync();
         return expiredDrivers.stream()
                 .map(Driver::closeAsync)
                 .reduce(closeAsync, (acc, ca) -> acc.thenCombine(ca, (a, b) -> b));
@@ -131,37 +132,37 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public Metrics metrics() {
-        return currentDriver.getDriver().metrics();
+        return currentDriver.get().metrics();
     }
 
     @Override
     public boolean isMetricsEnabled() {
-        return currentDriver.getDriver().isMetricsEnabled();
+        return currentDriver.get().isMetricsEnabled();
     }
 
     @Override
     public TypeSystem defaultTypeSystem() {
-        return currentDriver.getDriver().defaultTypeSystem();
+        return currentDriver.get().defaultTypeSystem();
     }
 
     @Override
     public void verifyConnectivity() {
-        currentDriver.getDriver().verifyConnectivity();
+        currentDriver.get().verifyConnectivity();
     }
 
     @Override
     public CompletionStage<Void> verifyConnectivityAsync() {
-        return currentDriver.getDriver().verifyConnectivityAsync();
+        return currentDriver.get().verifyConnectivityAsync();
     }
 
     @Override
     public boolean supportsMultiDb() {
-        return currentDriver.getDriver().supportsMultiDb();
+        return currentDriver.get().supportsMultiDb();
     }
 
     @Override
     public CompletionStage<Boolean> supportsMultiDbAsync() {
-        return currentDriver.getDriver().supportsMultiDbAsync();
+        return currentDriver.get().supportsMultiDbAsync();
     }
 
     private void cleanUpPreviousDrivers() {
@@ -176,11 +177,7 @@ public class ReAuthDriver implements Driver {
     }
 
     private <T> T checkExpiration(Supplier<T> block) {
-        var latestDriverHashCode = System.identityHashCode(currentDriver.getDriver());
-        if (currentDriver.isExpired()) {
-            withLock(() -> rotateCurrentDriver(latestDriverHashCode));
-        }
-        return block.get();
+        return withRefresh(block, () -> {});
     }
 
     void withLock(Runnable block) {
@@ -193,7 +190,7 @@ public class ReAuthDriver implements Driver {
     }
 
     <T> T withRefresh(Supplier<T> block, Runnable refresh) {
-        var driverHashCode = System.identityHashCode(currentDriver.getDriver());
+        var driverHashCode = System.identityHashCode(currentDriver.get());
         try {
             return block.get();
         } catch (AuthenticationException e) {
@@ -208,7 +205,7 @@ public class ReAuthDriver implements Driver {
 
     <T> Publisher<T> withRxRefresh(Supplier<Publisher<T>> block, Supplier<Publisher<Void>> refresh) {
         return Mono.defer(() -> {
-            var driverHashCode = System.identityHashCode(currentDriver.getDriver());
+            var driverHashCode = System.identityHashCode(currentDriver.get());
             return Mono.from(block.get())
                     .onErrorResume(AuthenticationException.class, e ->
                         Mono.fromRunnable(() -> withLock(() -> {
@@ -222,7 +219,7 @@ public class ReAuthDriver implements Driver {
     }
 
     <T> CompletionStage<T> withRefreshAsync(Supplier<CompletionStage<T>> block, Supplier<CompletionStage<Void>> refresh) {
-        var driverHashCode = System.identityHashCode(currentDriver.getDriver());
+        var driverHashCode = System.identityHashCode(currentDriver.get());
         return block.get()
                 .handle((value, e) -> {
                     if (e == null) {
@@ -243,9 +240,9 @@ public class ReAuthDriver implements Driver {
 
     void rotateCurrentDriver(int hashCode) {
         // Verify hash code because the current driver may be updated by another thread
-        if (System.identityHashCode(currentDriver.getDriver()) == hashCode) {
-            expiredDrivers.add(currentDriver.getDriver());
-            currentDriver = driverFactory.get();
+        if (System.identityHashCode(currentDriver.get()) == hashCode) {
+            expiredDrivers.add(currentDriver.get());
+            currentDriver.set(driverFactory.get());
         }
     }
 }
