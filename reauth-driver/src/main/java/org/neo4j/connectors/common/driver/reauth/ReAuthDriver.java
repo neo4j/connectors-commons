@@ -19,6 +19,7 @@ package org.neo4j.connectors.common.driver.reauth;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.neo4j.driver.Driver;
@@ -108,7 +109,9 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public AsyncSession asyncSession(SessionConfig sessionConfig) {
-        return checkExpiration(() -> this.currentDriver.getDriver().asyncSession(sessionConfig));
+        return checkExpiration(() ->
+                new ReAuthAsyncSession(this, () ->
+                        this.currentDriver.getDriver().asyncSession(sessionConfig)));
     }
 
     @Override
@@ -216,6 +219,26 @@ public class ReAuthDriver implements Driver {
                         .then(Mono.defer(() -> Mono.from(block.get())))
                     );
         });
+    }
+
+    <T> CompletionStage<T> withRefreshAsync(Supplier<CompletionStage<T>> block, Runnable refresh) {
+        var driverHashCode = System.identityHashCode(currentDriver.getDriver());
+        return block.get()
+                .handle((value, e) -> {
+                    log.debug("Handling result of async block");
+                    if (e == null) {
+                        return CompletableFuture.completedStage(value);
+                    }
+                    if (e instanceof AuthenticationException || e.getCause() instanceof AuthenticationException) {
+                        return CompletableFuture.runAsync(() -> withLock(() -> {
+                            log.debug("Driver has expired, re-creating a new one");
+                            rotateCurrentDriver(driverHashCode);
+                            refresh.run();
+                        })).thenCompose(vd -> block.get());
+                    }
+                    return CompletableFuture.<T>failedStage(e);
+                })
+                .thenCompose(Function.identity());
     }
 
     void rotateCurrentDriver(int hashCode) {

@@ -29,14 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -44,7 +38,6 @@ import java.util.stream.Stream;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -53,17 +46,15 @@ import org.keycloak.authorization.client.Configuration;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
 import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
 import org.neo4j.driver.*;
+import org.neo4j.driver.async.AsyncSession;
 import org.neo4j.driver.async.ResultCursor;
 import org.neo4j.driver.reactive.RxSession;
 import org.neo4j.driver.reactive.RxTransaction;
-import org.reactivestreams.Publisher;
 import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
 
 @Testcontainers(disabledWithoutDocker = true)
 public class ReAuthDriverIT {
@@ -428,25 +419,126 @@ public class ReAuthDriverIT {
         }
     }
 
-    @Test
-    @Disabled
-    void asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires() throws ExecutionException, InterruptedException {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false))) {
+    static Stream<Arguments> asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
+        var builder = Stream.<Arguments>builder();
+        Consumer<AsyncSession> write = (AsyncSession session) -> {
             var expectedId = UUID.randomUUID().toString();
             var params = Map.<String, Object>of("id", expectedId);
 
-            var asyncSession = driver.asyncSession();
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actualId = asyncSession
-                    .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
-                            .thenCompose(ResultCursor::singleAsync)
-                            .thenApply(r -> r.get(0).asString()))
-                    .whenComplete((result, error) -> asyncSession.closeAsync())
-                    .toCompletableFuture()
-                    .get();
+            try {
+                var actualId = session.writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                                .thenCompose(ResultCursor::singleAsync)
+                                .thenApply(r -> r.get(0).asString()))
+                        .whenComplete((result, error) -> session.closeAsync())
+                        .toCompletableFuture()
+                        .get();
+                assertThat(actualId).isEqualTo(expectedId);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        builder.add(Arguments.argumentSet("write", write));
 
-            assertThat(actualId).isEqualTo(expectedId);
+        Consumer<AsyncSession> read = (AsyncSession session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            try {
+                var actual = session.readTransactionAsync(tx -> tx.runAsync("RETURN 42")
+                                .thenCompose(ResultCursor::singleAsync)
+                                .thenApply(r -> r.get(0).asLong()))
+                        .whenComplete((result, error) -> session.closeAsync())
+                        .toCompletableFuture()
+                        .get();
+                assertThat(actual).isEqualTo(42L);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        builder.add(Arguments.argumentSet("read", read));
+
+        Consumer<AsyncSession> run = (AsyncSession session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            try {
+                var actual = session.runAsync("RETURN 42")
+                                .thenCompose(ResultCursor::singleAsync)
+                                .thenApply(r -> r.get(0).asLong())
+                        .whenComplete((result, error) -> session.closeAsync())
+                        .toCompletableFuture()
+                        .get();
+                assertThat(actual).isEqualTo(42L);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        builder.add(Arguments.argumentSet("run", run));
+
+
+        Consumer<AsyncSession> transaction = (AsyncSession session) -> {
+            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
+
+            try {
+                var actualId = session.beginTransactionAsync()
+                        .thenCompose(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                            .thenCompose(ResultCursor::singleAsync)
+                            .whenComplete((result, error) -> {
+                                if (error != null) {
+                                    tx.rollbackAsync();
+                                } else {
+                                    tx.commitAsync();
+                                }
+                            })
+                            .thenApply(r -> r.get(0).asString())
+                        )
+                        .whenComplete((result, error) -> session.closeAsync())
+                        .toCompletableFuture()
+                        .get();
+                assertThat(actualId).isEqualTo(expectedId);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        builder.add(Arguments.argumentSet("transaction", transaction));
+
+        Consumer<AsyncSession> openTransaction = (AsyncSession session) -> {
+            var expectedId = UUID.randomUUID().toString();
+            var params = Map.<String, Object>of("id", expectedId);
+
+            try {
+                var actualId = session.beginTransactionAsync()
+                        .thenCompose(tx -> delayAsync(SERVER_SIDE_TOKEN_LIFESPAN)
+                                .thenCompose(v -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                                .thenCompose(ResultCursor::singleAsync)
+                                .whenComplete((result, error) -> {
+                                    if (error != null) {
+                                        tx.rollbackAsync();
+                                    } else {
+                                        tx.commitAsync();
+                                    }
+                                })
+                                .thenApply(r -> r.get(0).asString()))
+                        )
+                        .whenComplete((result, error) -> session.closeAsync())
+                        .toCompletableFuture()
+                        .get();
+                assertThat(actualId).isEqualTo(expectedId);
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        };
+        builder.add(Arguments.argumentSet("openTransaction", openTransaction));
+
+        return builder.build();
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<AsyncSession> methodTest) {
+        var driversLog = new CopyOnWriteArrayList<Driver>();
+        try (var driver = new ReAuthDriver(driverSupplier(driversLog, false))) {
+            var asyncSession = driver.asyncSession();
+            methodTest.accept(asyncSession);
         }
     }
 
@@ -473,6 +565,11 @@ public class ReAuthDriverIT {
             throw new RuntimeException(e);
         }
     }
+
+    static CompletionStage<Void> delayAsync(Duration duration) {
+        return CompletableFuture.runAsync(() -> {}, CompletableFuture.delayedExecutor(duration.toMillis(), TimeUnit.MILLISECONDS));
+    }
+
 
     @AfterAll
     static void cleanUp() {
