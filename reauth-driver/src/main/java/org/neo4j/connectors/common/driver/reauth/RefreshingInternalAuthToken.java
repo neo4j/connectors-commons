@@ -32,7 +32,7 @@ public class RefreshingInternalAuthToken extends InternalAuthToken {
     private final Supplier<AuthenticationToken> supplier;
 
     RefreshingInternalAuthToken(Supplier<AuthenticationToken> supplier) {
-        super(Collections.emptyMap());
+        super(Collections.emptyMap()); // we just use this class as an interface, ignoring parent class fields
         this.supplier = supplier;
     }
 
@@ -65,6 +65,7 @@ public class RefreshingInternalAuthToken extends InternalAuthToken {
                 format("Authentication token of class %s is not supported", token.getClass()));
     }
 
+    @Override
     public Map<String, Value> toMap() {
         return ((InternalAuthToken) convertToAuthToken(supplier.get())).toMap();
     }
