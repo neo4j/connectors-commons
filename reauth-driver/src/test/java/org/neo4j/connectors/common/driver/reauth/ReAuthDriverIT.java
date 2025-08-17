@@ -18,7 +18,6 @@ package org.neo4j.connectors.common.driver.reauth;
 
 import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 import static reactor.core.publisher.Flux.from;
 import static reactor.core.publisher.Flux.usingWhen;
 import static reactor.core.publisher.Mono.*;
@@ -31,19 +30,16 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
-import org.neo4j.connectors.authn.BearerAuthenticationToken;
 import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
 import org.neo4j.driver.*;
 import org.neo4j.driver.async.AsyncSession;
@@ -163,23 +159,12 @@ public class ReAuthDriverIT {
     @ParameterizedTest
     @MethodSource("expiringMethods")
     void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        try (var driver = createDriver()) {
             func.accept(driver);
-            assertThat(driversLog)
-                    .overridingErrorMessage(() -> format(
-                            "expected only one driver to be created before token expires, but was %d",
-                            driversLog.size()))
-                    .hasSize(1);
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
             func.accept(driver);
-            assertThat(driversLog)
-                    .overridingErrorMessage(() -> format(
-                            "expected only two drivers to be created after token expires, but was %d",
-                            driversLog.size()))
-                    .hasSize(2);
         }
     }
 
@@ -187,14 +172,8 @@ public class ReAuthDriverIT {
     @MethodSource("expiringMethods")
     void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func)
             throws InterruptedException, ExecutionException {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        try (var driver = createDriver()) {
             func.accept(driver);
-            assertThat(driversLog)
-                    .overridingErrorMessage(() -> format(
-                            "expected only one driver to be created before token expires, but was %d",
-                            driversLog.size()))
-                    .hasSize(1);
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
@@ -213,39 +192,6 @@ public class ReAuthDriverIT {
             } finally {
                 executor.shutdownNow();
             }
-
-            assertThat(driversLog)
-                    .overridingErrorMessage(() -> format(
-                            "expected only two drivers to be created after token expires, but was %d",
-                            driversLog.size()))
-                    .hasSize(2);
-        }
-    }
-
-    @Test
-    void reAuthDriverCleansUpExpiredDrivers() {
-        @SuppressWarnings("unchecked")
-        var func =
-                (Consumer<Driver>) expiringMethods().findFirst().orElseThrow().get()[0];
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
-            func.accept(driver);
-            assertThat(driversLog)
-                    .overridingErrorMessage(() -> format(
-                            "expected only two drivers to be created after token expires, but was %d",
-                            driversLog.size()))
-                    .hasSize(1);
-
-            sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-
-            func.accept(driver);
-            assertThat(driversLog)
-                    .overridingErrorMessage(() -> format(
-                            "expected only two drivers to be created after token expires, but was %d",
-                            driversLog.size()))
-                    .hasSize(2);
-
-            await().atMost(Duration.ofSeconds(1)).until(driver.expiredDrivers::isEmpty);
         }
     }
 
@@ -309,8 +255,7 @@ public class ReAuthDriverIT {
     @ParameterizedTest
     @MethodSource
     void sessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<Session> methodTest) {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        try (var driver = createDriver()) {
             try (var session = driver.session()) {
                 methodTest.accept(session);
             }
@@ -405,8 +350,7 @@ public class ReAuthDriverIT {
     @ParameterizedTest
     @MethodSource
     void rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<RxSession> methodTest) {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        try (var driver = createDriver()) {
             var rxSession = driver.rxSession();
             methodTest.accept(rxSession);
         }
@@ -528,27 +472,17 @@ public class ReAuthDriverIT {
     @ParameterizedTest
     @MethodSource
     void asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<AsyncSession> methodTest) {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        try (var driver = createDriver()) {
             var asyncSession = driver.asyncSession();
             methodTest.accept(asyncSession);
         }
     }
 
-    private static Supplier<Driver> driverSupplier(List<Driver> driversLog) {
-        return () -> {
-            var config = Config.builder()
-                    .withConnectionTimeout(2, TimeUnit.SECONDS)
-                    .withMaxConnectionLifetime(2, TimeUnit.SECONDS)
-                    .withConnectionLivenessCheckTimeout(2, TimeUnit.SECONDS)
-                    .withDriverMetrics()
-                    .withLogging(Logging.slf4j())
-                    .build();
-            var token = (BearerAuthenticationToken) authenticationSupplier.get();
-            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), config);
-            driversLog.add(driver);
-            return driver;
-        };
+    private static Driver createDriver() {
+        var config = Config.builder()
+                .withMaxConnectionLifetime(2, TimeUnit.SECONDS)
+                .build();
+        return ReAuthDriverFactory.driver(NEO4J.getBoltUrl(), authenticationSupplier, config);
     }
 
     static void sleep(Duration duration) {
