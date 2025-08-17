@@ -46,12 +46,12 @@
         <junit-bom.version>5.13.4</junit-bom.version>
         <keycloak.version>26.0.6</keycloak.version>
         <license.id>neo4j_apache_v2</license.id>
+        <logback.version>1.5.18</logback.version>
         <maven.compiler.release>11</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <slf4j.version>2.0.17</slf4j.version>
         <testcontainers-bom.version>1.21.3</testcontainers-bom.version>
         <testcontainers-keycloak.version>3.8.0</testcontainers-keycloak.version>
-        <slf4j.version>2.0.17</slf4j.version>
-        <logback.version>1.5.18</logback.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -77,6 +77,11 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>com.github.dasniko</groupId>
                 <artifactId>testcontainers-keycloak</artifactId>
                 <version>${testcontainers-keycloak.version}</version>
@@ -90,11 +95,6 @@
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-junit4-mock</artifactId>
                 <version>3.6.9</version>
-            </dependency>
-            <dependency>
-                <groupId>ch.qos.logback</groupId>
-                <artifactId>logback-classic</artifactId>
-                <version>${logback.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.assertj</groupId>

@@ -86,9 +86,8 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public Session session(SessionConfig sessionConfig) {
-        return checkExpiration(() ->
-                new ReAuthSession(this, () ->
-                        this.currentDriver.get().session(sessionConfig)));
+        return checkExpiration(
+                () -> new ReAuthSession(this, () -> this.currentDriver.get().session(sessionConfig)));
     }
 
     @Override
@@ -98,9 +97,8 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public RxSession rxSession(SessionConfig sessionConfig) {
-        return checkExpiration(() ->
-                new ReAuthRxSession(this, () ->
-                        this.currentDriver.get().rxSession(sessionConfig)));
+        return checkExpiration(
+                () -> new ReAuthRxSession(this, () -> this.currentDriver.get().rxSession(sessionConfig)));
     }
 
     @Override
@@ -111,8 +109,7 @@ public class ReAuthDriver implements Driver {
     @Override
     public AsyncSession asyncSession(SessionConfig sessionConfig) {
         return checkExpiration(() ->
-                new ReAuthAsyncSession(this, () ->
-                        this.currentDriver.get().asyncSession(sessionConfig)));
+                new ReAuthAsyncSession(this, () -> this.currentDriver.get().asyncSession(sessionConfig)));
     }
 
     @Override
@@ -207,18 +204,17 @@ public class ReAuthDriver implements Driver {
         return Mono.defer(() -> {
             var driverHashCode = System.identityHashCode(currentDriver.get());
             return Mono.from(block.get())
-                    .onErrorResume(AuthenticationException.class, e ->
-                        Mono.fromRunnable(() -> withLock(() -> {
-                            log.debug("Caught authentication exception. Try to refresh the driver and retry.");
-                            rotateCurrentDriver(driverHashCode);
-                        }))
-                        .then(Mono.defer(() -> Mono.from(refresh.get())))
-                        .then(Mono.defer(() -> Mono.from(block.get())))
-                    );
+                    .onErrorResume(AuthenticationException.class, e -> Mono.fromRunnable(() -> withLock(() -> {
+                                log.debug("Caught authentication exception. Try to refresh the driver and retry.");
+                                rotateCurrentDriver(driverHashCode);
+                            }))
+                            .then(Mono.defer(() -> Mono.from(refresh.get())))
+                            .then(Mono.defer(() -> Mono.from(block.get()))));
         });
     }
 
-    <T> CompletionStage<T> withRefreshAsync(Supplier<CompletionStage<T>> block, Supplier<CompletionStage<Void>> refresh) {
+    <T> CompletionStage<T> withRefreshAsync(
+            Supplier<CompletionStage<T>> block, Supplier<CompletionStage<Void>> refresh) {
         var driverHashCode = System.identityHashCode(currentDriver.get());
         return block.get()
                 .handle((value, e) -> {
@@ -227,11 +223,11 @@ public class ReAuthDriver implements Driver {
                     }
                     if (e instanceof AuthenticationException || e.getCause() instanceof AuthenticationException) {
                         return CompletableFuture.runAsync(() -> withLock(() -> {
-                            log.debug("Caught authentication exception. Try to refresh the driver and retry.");
-                            rotateCurrentDriver(driverHashCode);
-                        }))
-                        .thenCompose(vd -> refresh.get())
-                        .thenCompose(vd -> block.get());
+                                    log.debug("Caught authentication exception. Try to refresh the driver and retry.");
+                                    rotateCurrentDriver(driverHashCode);
+                                }))
+                                .thenCompose(vd -> refresh.get())
+                                .thenCompose(vd -> block.get());
                     }
                     return CompletableFuture.<T>failedStage(e);
                 })

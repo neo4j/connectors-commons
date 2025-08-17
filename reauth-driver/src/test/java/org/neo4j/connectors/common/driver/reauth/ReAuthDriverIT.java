@@ -265,7 +265,8 @@ public class ReAuthDriverIT {
 
         Consumer<Session> read = (Session session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actual = session.readTransaction(tx -> tx.run("RETURN 42").single().get(0).asLong());
+            var actual = session.readTransaction(
+                    tx -> tx.run("RETURN 42").single().get(0).asLong());
             assertThat(actual).isEqualTo(42L);
         };
         builder.add(Arguments.argumentSet("read", read));
@@ -283,7 +284,10 @@ public class ReAuthDriverIT {
             var params = Map.<String, Object>of("id", expectedId);
 
             var tx = session.beginTransaction();
-            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).single().get(0).asString();
+            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                    .single()
+                    .get(0)
+                    .asString();
             assertThat(actual).isEqualTo(expectedId);
             tx.commit();
         };
@@ -297,7 +301,10 @@ public class ReAuthDriverIT {
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
-            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).single().get(0).asString();
+            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                    .single()
+                    .get(0)
+                    .asString();
             assertThat(actual).isEqualTo(expectedId);
             tx.commit();
         };
@@ -324,7 +331,8 @@ public class ReAuthDriverIT {
             var params = Map.<String, Object>of("id", expectedId);
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actualId = usingWhen(just(session),
+            var actualId = usingWhen(
+                            just(session),
                             rxSession -> from(rxSession.writeTransaction(
                                     tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
                                             .records())),
@@ -338,8 +346,10 @@ public class ReAuthDriverIT {
 
         Consumer<RxSession> read = (RxSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actual = usingWhen(just(session),
-                            rxSession -> from(rxSession.readTransaction(tx -> tx.run("RETURN 42").records())),
+            var actual = usingWhen(
+                            just(session),
+                            rxSession -> from(rxSession.readTransaction(
+                                    tx -> tx.run("RETURN 42").records())),
                             RxSession::close)
                     .blockFirst()
                     .get(0)
@@ -350,7 +360,8 @@ public class ReAuthDriverIT {
 
         Consumer<RxSession> run = (RxSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actual = usingWhen(just(session),
+            var actual = usingWhen(
+                            just(session),
                             rxSession -> from(rxSession.run("RETURN 42").records()),
                             RxSession::close)
                     .blockFirst()
@@ -360,16 +371,18 @@ public class ReAuthDriverIT {
         };
         builder.add(Arguments.argumentSet("run", run));
 
-
         Consumer<RxSession> transaction = (RxSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
             var expectedId = UUID.randomUUID().toString();
             var params = Map.<String, Object>of("id", expectedId);
 
-            var actual = usingWhen(just(session),
+            var actual = usingWhen(
+                            just(session),
                             rxSession -> from(rxSession.beginTransaction())
-                                    .flatMap(tx -> usingWhen(just(tx),
-                                            t -> from(t.run("MERGE (t:Test {id: $id}) RETURN t.id", params).records()),
+                                    .flatMap(tx -> usingWhen(
+                                            just(tx),
+                                            t -> from(t.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                                                    .records()),
                                             RxTransaction::commit)),
                             RxSession::close)
                     .blockFirst()
@@ -383,15 +396,18 @@ public class ReAuthDriverIT {
             var expectedId = UUID.randomUUID().toString();
             var params = Map.<String, Object>of("id", expectedId);
 
-            var actual = usingWhen(just(session),
-                    rxSession -> from(rxSession.beginTransaction())
-                            .flatMap(tx -> usingWhen(just(tx),
-                                    t -> delay(SERVER_SIDE_TOKEN_LIFESPAN)
-                                            .thenMany(from(t.run("MERGE (t:Test {id: $id}) RETURN t.id", params).records())),
-                                    RxTransaction::commit,
-                                    (t, ex) -> t.rollback(),
-                                    RxTransaction::close)),
-                    RxSession::close)
+            var actual = usingWhen(
+                            just(session),
+                            rxSession -> from(rxSession.beginTransaction())
+                                    .flatMap(tx -> usingWhen(
+                                            just(tx),
+                                            t -> delay(SERVER_SIDE_TOKEN_LIFESPAN)
+                                                    .thenMany(from(t.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                                                            .records())),
+                                            RxTransaction::commit,
+                                            (t, ex) -> t.rollback(),
+                                            RxTransaction::close)),
+                            RxSession::close)
                     .blockFirst()
                     .get(0)
                     .asString();
@@ -420,9 +436,10 @@ public class ReAuthDriverIT {
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
             try {
-                var actualId = session.writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
-                                .thenCompose(ResultCursor::singleAsync)
-                                .thenApply(r -> r.get(0).asString()))
+                var actualId = session.writeTransactionAsync(
+                                tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
+                                        .thenCompose(ResultCursor::singleAsync)
+                                        .thenApply(r -> r.get(0).asString()))
                         .whenComplete((result, error) -> session.closeAsync())
                         .toCompletableFuture()
                         .get();
@@ -453,8 +470,8 @@ public class ReAuthDriverIT {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
             try {
                 var actual = session.runAsync("RETURN 42")
-                                .thenCompose(ResultCursor::singleAsync)
-                                .thenApply(r -> r.get(0).asLong())
+                        .thenCompose(ResultCursor::singleAsync)
+                        .thenApply(r -> r.get(0).asLong())
                         .whenComplete((result, error) -> session.closeAsync())
                         .toCompletableFuture()
                         .get();
@@ -465,7 +482,6 @@ public class ReAuthDriverIT {
         };
         builder.add(Arguments.argumentSet("run", run));
 
-
         Consumer<AsyncSession> transaction = (AsyncSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
             var expectedId = UUID.randomUUID().toString();
@@ -474,16 +490,15 @@ public class ReAuthDriverIT {
             try {
                 var actualId = session.beginTransactionAsync()
                         .thenCompose(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
-                            .thenCompose(ResultCursor::singleAsync)
-                            .whenComplete((result, error) -> {
-                                if (error != null) {
-                                    tx.rollbackAsync();
-                                } else {
-                                    tx.commitAsync();
-                                }
-                            })
-                            .thenApply(r -> r.get(0).asString())
-                        )
+                                .thenCompose(ResultCursor::singleAsync)
+                                .whenComplete((result, error) -> {
+                                    if (error != null) {
+                                        tx.rollbackAsync();
+                                    } else {
+                                        tx.commitAsync();
+                                    }
+                                })
+                                .thenApply(r -> r.get(0).asString()))
                         .whenComplete((result, error) -> session.closeAsync())
                         .toCompletableFuture()
                         .get();
@@ -502,16 +517,15 @@ public class ReAuthDriverIT {
                 var actualId = session.beginTransactionAsync()
                         .thenCompose(tx -> delayAsync(SERVER_SIDE_TOKEN_LIFESPAN)
                                 .thenCompose(v -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
-                                .thenCompose(ResultCursor::singleAsync)
-                                .whenComplete((result, error) -> {
-                                    if (error != null) {
-                                        tx.rollbackAsync();
-                                    } else {
-                                        tx.commitAsync();
-                                    }
-                                })
-                                .thenApply(r -> r.get(0).asString()))
-                        )
+                                        .thenCompose(ResultCursor::singleAsync)
+                                        .whenComplete((result, error) -> {
+                                            if (error != null) {
+                                                tx.rollbackAsync();
+                                            } else {
+                                                tx.commitAsync();
+                                            }
+                                        })
+                                        .thenApply(r -> r.get(0).asString())))
                         .whenComplete((result, error) -> session.closeAsync())
                         .toCompletableFuture()
                         .get();
@@ -560,7 +574,8 @@ public class ReAuthDriverIT {
     }
 
     static CompletionStage<Void> delayAsync(Duration duration) {
-        return CompletableFuture.runAsync(() -> {}, CompletableFuture.delayedExecutor(duration.toMillis(), TimeUnit.MILLISECONDS));
+        return CompletableFuture.runAsync(
+                () -> {}, CompletableFuture.delayedExecutor(duration.toMillis(), TimeUnit.MILLISECONDS));
     }
 
     @AfterAll
@@ -570,4 +585,3 @@ public class ReAuthDriverIT {
         NETWORK.close();
     }
 }
-
