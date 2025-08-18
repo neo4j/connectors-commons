@@ -47,7 +47,10 @@ public class RefreshingInternalAuthToken extends InternalAuthToken {
         }
         if (token instanceof UserNameAndPasswordAuthenticationToken) {
             var userNameAndPasswordToken = (UserNameAndPasswordAuthenticationToken) token;
-            return AuthTokens.basic(userNameAndPasswordToken.getUsername(), userNameAndPasswordToken.getPassword());
+            return AuthTokens.basic(
+                    userNameAndPasswordToken.getUsername(),
+                    userNameAndPasswordToken.getPassword(),
+                    userNameAndPasswordToken.getRealm());
         }
         if (token instanceof DisabledAuthenticationToken) {
             return AuthTokens.none();
