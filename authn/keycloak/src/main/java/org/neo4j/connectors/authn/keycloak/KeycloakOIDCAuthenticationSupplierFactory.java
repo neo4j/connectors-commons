@@ -27,8 +27,7 @@ import org.neo4j.connectors.authn.AuthenticationTokenSupplierFactory;
 /**
  * Use this factory to spawn a keycloak oidc configured sso client.
  */
-public class KeycloakOIDCAuthenticationSupplierFactory
-        implements AuthenticationTokenSupplierFactory<AuthenticationToken> {
+public class KeycloakOIDCAuthenticationSupplierFactory implements AuthenticationTokenSupplierFactory {
 
     @Override
     public String getName() {
