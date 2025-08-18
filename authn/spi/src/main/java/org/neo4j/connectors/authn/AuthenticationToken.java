@@ -17,7 +17,6 @@
 package org.neo4j.connectors.authn;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.Map;
 
 public interface AuthenticationToken {
@@ -46,7 +45,7 @@ public interface AuthenticationToken {
     }
 
     static AuthenticationToken custom(String principal, String credentials, String realm, String scheme) {
-        return custom(principal, credentials, realm, scheme, Collections.emptyMap());
+        return custom(principal, credentials, realm, scheme, null);
     }
 
     static AuthenticationToken custom(
