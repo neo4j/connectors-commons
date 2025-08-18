@@ -16,29 +16,21 @@
  */
 package org.neo4j.connectors.common.driver.reauth;
 
-import java.time.Instant;
-import java.util.Objects;
-import org.neo4j.driver.Driver;
+import static org.slf4j.LoggerFactory.*;
 
-class ExpiringDriver {
+import org.slf4j.Logger;
 
-    private final Driver driver;
-    private final Instant expiresAt;
+public final class Utils {
 
-    public ExpiringDriver(Driver driver, Instant expiresAt) {
-        this.driver = Objects.requireNonNull(driver);
-        this.expiresAt = Objects.requireNonNull(expiresAt);
-    }
+    private Utils() {}
 
-    public Driver getDriver() {
-        return driver;
-    }
+    private static final Logger log = getLogger(Utils.class);
 
-    public Instant getExpiresAt() {
-        return expiresAt;
-    }
-
-    public boolean isExpired() {
-        return Instant.now().isAfter(expiresAt);
+    public static void closeQuietly(AutoCloseable closeable) {
+        try {
+            closeable.close();
+        } catch (Exception e) {
+            log.debug("Failed to close resource", e);
+        }
     }
 }

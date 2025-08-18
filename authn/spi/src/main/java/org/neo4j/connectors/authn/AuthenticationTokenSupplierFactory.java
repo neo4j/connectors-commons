@@ -19,6 +19,8 @@ package org.neo4j.connectors.authn;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public interface AuthenticationTokenSupplierFactory<T extends AuthenticationToken> {
-    Supplier<T> create(String username, String password, Map<String, String> parameters);
+public interface AuthenticationTokenSupplierFactory {
+    String getName();
+
+    Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters);
 }

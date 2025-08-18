@@ -16,33 +16,84 @@
  */
 package org.neo4j.connectors.common.driver.reauth;
 
+import static java.lang.String.format;
+
 import java.net.URI;
 import java.util.function.Supplier;
+import org.neo4j.connectors.authn.AuthenticationToken;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
-import org.neo4j.driver.*;
+import org.neo4j.connectors.authn.CustomAuthenticationToken;
+import org.neo4j.connectors.authn.DisabledAuthenticationToken;
+import org.neo4j.connectors.authn.ExpiringAuthenticationToken;
+import org.neo4j.connectors.authn.KerberosAuthenticationToken;
+import org.neo4j.connectors.authn.UserNameAndPasswordAuthenticationToken;
+import org.neo4j.driver.AuthToken;
+import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.Config;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.GraphDatabase;
 
 public final class ReAuthDriverFactory {
 
     private ReAuthDriverFactory() {}
 
-    public static Driver driver(String uri, Supplier<BearerAuthenticationToken> authTokenSupplier) {
+    public static Driver driver(String uri, Supplier<AuthenticationToken> authTokenSupplier) {
         return driver(URI.create(uri), authTokenSupplier, defaultConfig());
     }
 
-    public static Driver driver(URI uri, Supplier<BearerAuthenticationToken> authTokenSupplier) {
+    public static Driver driver(URI uri, Supplier<AuthenticationToken> authTokenSupplier) {
         return driver(uri, authTokenSupplier, defaultConfig());
     }
 
-    public static Driver driver(String uri, Supplier<BearerAuthenticationToken> authTokenSupplier, Config config) {
+    public static Driver driver(String uri, Supplier<AuthenticationToken> authTokenSupplier, Config config) {
         return driver(URI.create(uri), authTokenSupplier, config);
     }
 
-    public static Driver driver(URI uri, Supplier<BearerAuthenticationToken> authTokenSupplier, Config config) {
-        return new ReAuthDriver(() -> {
-            var authToken = authTokenSupplier.get();
-            var driver = GraphDatabase.driver(uri, AuthTokens.bearer(authToken.getToken()), config);
-            return new ExpiringDriver(driver, authToken.getExpiresAt());
-        });
+    public static Driver driver(URI uri, Supplier<AuthenticationToken> authTokenSupplier, Config config) {
+        var authenticationToken = authTokenSupplier.get();
+        var originalDriver = GraphDatabase.driver(uri, convertToAuthToken(authenticationToken), config);
+
+        if (!(authenticationToken instanceof ExpiringAuthenticationToken)) {
+            return originalDriver;
+        }
+
+        Supplier<Driver> refresher = () -> {
+            var refreshedToken = authTokenSupplier.get();
+            return GraphDatabase.driver(uri, convertToAuthToken(refreshedToken), config);
+        };
+        return new ReAuthDriver(originalDriver, refresher);
+    }
+
+    private static AuthToken convertToAuthToken(AuthenticationToken token) throws IllegalArgumentException {
+        if (token instanceof BearerAuthenticationToken) {
+            var bearerToken = (BearerAuthenticationToken) token;
+            return AuthTokens.bearer(bearerToken.getToken());
+        }
+        if (token instanceof KerberosAuthenticationToken) {
+            var kerberosToken = (KerberosAuthenticationToken) token;
+            return AuthTokens.kerberos(kerberosToken.getToken());
+        }
+        if (token instanceof UserNameAndPasswordAuthenticationToken) {
+            var userNameAndPasswordToken = (UserNameAndPasswordAuthenticationToken) token;
+            return AuthTokens.basic(
+                    userNameAndPasswordToken.getUsername(),
+                    userNameAndPasswordToken.getPassword(),
+                    userNameAndPasswordToken.getRealm());
+        }
+        if (token instanceof DisabledAuthenticationToken) {
+            return AuthTokens.none();
+        }
+        if (token instanceof CustomAuthenticationToken) {
+            var customToken = (CustomAuthenticationToken) token;
+            return AuthTokens.custom(
+                    customToken.getPrincipal(),
+                    customToken.getCredentials(),
+                    customToken.getRealm(),
+                    customToken.getScheme(),
+                    customToken.getParameters());
+        }
+        throw new IllegalArgumentException(
+                format("Authentication token of class %s is not supported", token.getClass()));
     }
 
     static Config defaultConfig() {
