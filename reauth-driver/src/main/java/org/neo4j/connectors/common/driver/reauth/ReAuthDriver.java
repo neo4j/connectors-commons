@@ -28,8 +28,7 @@ import org.neo4j.driver.Metrics;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.SessionConfig;
 import org.neo4j.driver.async.AsyncSession;
-import org.neo4j.driver.exceptions.AuthenticationException;
-import org.neo4j.driver.exceptions.TokenExpiredException;
+import org.neo4j.driver.exceptions.SecurityException;
 import org.neo4j.driver.reactive.RxSession;
 import org.neo4j.driver.types.TypeSystem;
 import org.reactivestreams.Publisher;
@@ -191,7 +190,7 @@ public class ReAuthDriver implements Driver {
         var driverHashCode = System.identityHashCode(currentDriver.get());
         try {
             return block.get();
-        } catch (AuthenticationException | TokenExpiredException e) {
+        } catch (SecurityException e) {
             withLock(() -> {
                 log.debug("Caught authentication exception. Try to refresh the driver and retry.");
                 rotateCurrentDriver(driverHashCode);
@@ -205,15 +204,12 @@ public class ReAuthDriver implements Driver {
         return Mono.defer(() -> {
             var driverHashCode = System.identityHashCode(currentDriver.get());
             return Mono.from(block.get())
-                    .onErrorResume(
-                            e -> e instanceof AuthenticationException || e instanceof TokenExpiredException,
-                            e -> Mono.fromRunnable(() -> withLock(() -> {
-                                        log.debug(
-                                                "Caught authentication exception. Try to refresh the driver and retry.");
-                                        rotateCurrentDriver(driverHashCode);
-                                    }))
-                                    .then(Mono.defer(() -> Mono.from(refresh.get())))
-                                    .then(Mono.defer(() -> Mono.from(block.get()))));
+                    .onErrorResume(SecurityException.class, e -> Mono.fromRunnable(() -> withLock(() -> {
+                                log.debug("Caught authentication exception. Try to refresh the driver and retry.");
+                                rotateCurrentDriver(driverHashCode);
+                            }))
+                            .then(Mono.defer(() -> Mono.from(refresh.get())))
+                            .then(Mono.defer(() -> Mono.from(block.get()))));
         });
     }
 
@@ -225,10 +221,7 @@ public class ReAuthDriver implements Driver {
                     if (e == null) {
                         return CompletableFuture.completedStage(value);
                     }
-                    if (e instanceof AuthenticationException
-                            || e instanceof TokenExpiredException
-                            || e.getCause() instanceof AuthenticationException
-                            || e.getCause() instanceof TokenExpiredException) {
+                    if (e instanceof SecurityException || e.getCause() instanceof SecurityException) {
                         return CompletableFuture.runAsync(() -> withLock(() -> {
                                     log.debug("Caught authentication exception. Try to refresh the driver and retry.");
                                     rotateCurrentDriver(driverHashCode);
