@@ -18,7 +18,15 @@ package org.neo4j.connectors.common.driver.reauth.tracking;
 
 import java.util.Map;
 import java.util.Objects;
-import org.neo4j.driver.*;
+import org.neo4j.driver.Bookmark;
+import org.neo4j.driver.Query;
+import org.neo4j.driver.Record;
+import org.neo4j.driver.Result;
+import org.neo4j.driver.Session;
+import org.neo4j.driver.Transaction;
+import org.neo4j.driver.TransactionConfig;
+import org.neo4j.driver.TransactionWork;
+import org.neo4j.driver.Value;
 
 public class TrackedSession implements Session {
 
