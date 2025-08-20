@@ -16,7 +16,7 @@
  */
 package org.neo4j.connectors.common.driver.reauth;
 
-import static org.slf4j.LoggerFactory.*;
+import static org.slf4j.LoggerFactory.getLogger;
 
 import org.slf4j.Logger;
 

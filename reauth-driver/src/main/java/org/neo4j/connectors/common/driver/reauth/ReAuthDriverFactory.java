@@ -38,11 +38,11 @@ public final class ReAuthDriverFactory {
     private ReAuthDriverFactory() {}
 
     public static Driver driver(String uri, Supplier<AuthenticationToken> authTokenSupplier) {
-        return driver(URI.create(uri), authTokenSupplier, defaultConfig());
+        return driver(URI.create(uri), authTokenSupplier, Config.defaultConfig());
     }
 
     public static Driver driver(URI uri, Supplier<AuthenticationToken> authTokenSupplier) {
-        return driver(uri, authTokenSupplier, defaultConfig());
+        return driver(uri, authTokenSupplier, Config.defaultConfig());
     }
 
     public static Driver driver(String uri, Supplier<AuthenticationToken> authTokenSupplier, Config config) {
@@ -94,9 +94,5 @@ public final class ReAuthDriverFactory {
         }
         throw new IllegalArgumentException(
                 format("Authentication token of class %s is not supported", token.getClass()));
-    }
-
-    static Config defaultConfig() {
-        return Config.builder().withDriverMetrics().build();
     }
 }

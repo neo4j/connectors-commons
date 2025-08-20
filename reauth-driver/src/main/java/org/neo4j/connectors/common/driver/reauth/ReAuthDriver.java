@@ -17,12 +17,18 @@
 package org.neo4j.connectors.common.driver.reauth;
 
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.neo4j.connectors.common.driver.reauth.tracking.TrackingDriver;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Metrics;
 import org.neo4j.driver.Session;
@@ -44,10 +50,10 @@ public class ReAuthDriver implements Driver {
 
     private final Supplier<Driver> driverFactory;
 
-    private final AtomicReference<Driver> currentDriver = new AtomicReference<>();
+    private final AtomicReference<TrackingDriver> currentDriver = new AtomicReference<>();
     private final ReentrantLock currentDriverLock = new ReentrantLock();
 
-    final List<Driver> expiredDrivers = new CopyOnWriteArrayList<>();
+    final List<TrackingDriver> expiredDrivers = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService cleanupExecutor;
 
     ReAuthDriver(Driver currentDriver, Supplier<Driver> driverFactory) {
@@ -64,14 +70,11 @@ public class ReAuthDriver implements Driver {
 
     ReAuthDriver(Driver currentDriver, Supplier<Driver> driverFactory, long cleanupIntervalMillis) {
         this.driverFactory = driverFactory;
-        this.currentDriver.set(currentDriver);
-        if (!currentDriver.isMetricsEnabled()) {
-            throw new IllegalArgumentException("Driver must be configured with metrics enabled");
-        }
+        this.currentDriver.set(new TrackingDriver(currentDriver));
 
         cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
         cleanupExecutor.scheduleAtFixedRate(
-                this::cleanUpPreviousDrivers, cleanupIntervalMillis, cleanupIntervalMillis, TimeUnit.MILLISECONDS);
+                this::cleanUpExpiredDrivers, cleanupIntervalMillis, cleanupIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -162,12 +165,9 @@ public class ReAuthDriver implements Driver {
         return currentDriver.get().supportsMultiDbAsync();
     }
 
-    private void cleanUpPreviousDrivers() {
+    void cleanUpExpiredDrivers() {
         var driverWithNoConnections = expiredDrivers.stream()
-                .filter(driver -> {
-                    var connectionPoolMetrics = driver.metrics().connectionPoolMetrics();
-                    return connectionPoolMetrics.stream().allMatch(m -> m.inUse() == 0);
-                })
+                .filter(driver -> driver.getOpenSessionCount() == 0)
                 .collect(Collectors.toList());
         driverWithNoConnections.forEach(Utils::closeQuietly);
         expiredDrivers.removeAll(driverWithNoConnections);
@@ -238,7 +238,7 @@ public class ReAuthDriver implements Driver {
         // Verify hash code because the current driver may be updated by another thread
         if (System.identityHashCode(currentDriver.get()) == hashCode) {
             expiredDrivers.add(currentDriver.get());
-            currentDriver.set(driverFactory.get());
+            currentDriver.set(new TrackingDriver(driverFactory.get()));
         }
     }
 }
