@@ -70,7 +70,7 @@ public class ReAuthDriver implements Driver {
 
         cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
         cleanupExecutor.scheduleAtFixedRate(
-                this::cleanUpPreviousDrivers, cleanupIntervalMillis, cleanupIntervalMillis, TimeUnit.MILLISECONDS);
+                this::cleanUpExpiredDrivers, cleanupIntervalMillis, cleanupIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -161,7 +161,7 @@ public class ReAuthDriver implements Driver {
         return currentDriver.get().supportsMultiDbAsync();
     }
 
-    private void cleanUpPreviousDrivers() {
+    void cleanUpExpiredDrivers() {
         var driverWithNoConnections = expiredDrivers.stream()
                 .filter(driver -> driver.getOpenSessionCount() == 0)
                 .collect(Collectors.toList());
