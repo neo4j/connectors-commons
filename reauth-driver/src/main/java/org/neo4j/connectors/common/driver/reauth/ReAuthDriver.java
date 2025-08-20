@@ -23,7 +23,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
 import org.neo4j.connectors.common.driver.reauth.tracking.TrackingDriver;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Metrics;

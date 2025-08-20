@@ -1,13 +1,28 @@
+/*
+ * Copyright (c) "Neo4j"
+ * Neo4j Sweden AB [https://neo4j.com]
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.neo4j.connectors.common.driver.reauth.tracking;
 
+import java.util.Map;
+import java.util.concurrent.CompletionStage;
 import org.neo4j.driver.*;
 import org.neo4j.driver.async.AsyncSession;
 import org.neo4j.driver.async.AsyncTransaction;
 import org.neo4j.driver.async.AsyncTransactionWork;
 import org.neo4j.driver.async.ResultCursor;
-
-import java.util.Map;
-import java.util.concurrent.CompletionStage;
 
 public class TrackedAsyncSession implements AsyncSession {
 
@@ -35,7 +50,8 @@ public class TrackedAsyncSession implements AsyncSession {
     }
 
     @Override
-    public <T> CompletionStage<T> readTransactionAsync(AsyncTransactionWork<CompletionStage<T>> work, TransactionConfig config) {
+    public <T> CompletionStage<T> readTransactionAsync(
+            AsyncTransactionWork<CompletionStage<T>> work, TransactionConfig config) {
         return delegate.readTransactionAsync(work, config);
     }
 
@@ -45,7 +61,8 @@ public class TrackedAsyncSession implements AsyncSession {
     }
 
     @Override
-    public <T> CompletionStage<T> writeTransactionAsync(AsyncTransactionWork<CompletionStage<T>> work, TransactionConfig config) {
+    public <T> CompletionStage<T> writeTransactionAsync(
+            AsyncTransactionWork<CompletionStage<T>> work, TransactionConfig config) {
         return delegate.writeTransactionAsync(work, config);
     }
 
@@ -55,7 +72,8 @@ public class TrackedAsyncSession implements AsyncSession {
     }
 
     @Override
-    public CompletionStage<ResultCursor> runAsync(String query, Map<String, Object> parameters, TransactionConfig config) {
+    public CompletionStage<ResultCursor> runAsync(
+            String query, Map<String, Object> parameters, TransactionConfig config) {
         return delegate.runAsync(query, parameters, config);
     }
 
@@ -71,8 +89,7 @@ public class TrackedAsyncSession implements AsyncSession {
 
     @Override
     public CompletionStage<Void> closeAsync() {
-        return delegate.closeAsync()
-                .thenRun(driver::onSessionClosure);
+        return delegate.closeAsync().thenRun(driver::onSessionClosure);
     }
 
     @Override

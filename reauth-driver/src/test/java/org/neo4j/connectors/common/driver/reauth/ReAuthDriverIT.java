@@ -35,7 +35,6 @@ import java.util.stream.Stream;
 import org.apache.http.impl.client.HttpClients;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -257,7 +256,8 @@ public class ReAuthDriverIT {
 
     @ParameterizedTest
     @MethodSource("expiringMethods")
-    void reAuthDriverCleansUpExpiredDriversWhileBeingUsed(Consumer<Driver> func) throws InterruptedException, ExecutionException {
+    void reAuthDriverCleansUpExpiredDriversWhileBeingUsed(Consumer<Driver> func)
+            throws InterruptedException, ExecutionException {
         // given
         var driversLog = new CopyOnWriteArrayList<Driver>();
         try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
@@ -267,7 +267,6 @@ public class ReAuthDriverIT {
                             "expected only two drivers to be created after token expires, but was %d",
                             driversLog.size()))
                     .hasSize(1);
-
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
@@ -279,10 +278,11 @@ public class ReAuthDriverIT {
                         return null;
                     })
                     .collect(Collectors.toList());
-            IntStream.range(0, 20).forEach(i -> jobs.add(() -> {
-                driver.cleanUpExpiredDrivers();
-                return null;
-            }));
+            IntStream.range(0, 20)
+                    .forEach(i -> jobs.add(() -> {
+                        driver.cleanUpExpiredDrivers();
+                        return null;
+                    }));
 
             // if we clean up expired drivers at a random moment in time, it doesn't lead to errors
             Collections.shuffle(jobs);
@@ -616,10 +616,7 @@ public class ReAuthDriverIT {
     private static Supplier<Driver> driverSupplier(List<Driver> driversLog) {
         return () -> {
             var config = Config.builder()
-                    .withConnectionTimeout(2, TimeUnit.SECONDS)
                     .withMaxConnectionLifetime(2, TimeUnit.SECONDS)
-                    .withConnectionLivenessCheckTimeout(2, TimeUnit.SECONDS)
-                    .withDriverMetrics()
                     .withLogging(Logging.slf4j())
                     .build();
             var token = (BearerAuthenticationToken) authenticationSupplier.get();
