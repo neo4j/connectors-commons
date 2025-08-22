@@ -1,0 +1,5 @@
+org.neo4j.connectors.authn.provided.BasicAuthenticationTokenSupplierFactory
+org.neo4j.connectors.authn.provided.BearerAuthenticationTokenSupplierFactory
+org.neo4j.connectors.authn.provided.CustomAuthenticationTokenSupplierFactory
+org.neo4j.connectors.authn.provided.KerberosAuthenticationTokenSupplierFactory
+org.neo4j.connectors.authn.provided.NoneAuthenticationTokenSupplierFactory

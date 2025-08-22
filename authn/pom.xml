@@ -15,6 +15,7 @@
     <modules>
         <module>spi</module>
         <module>keycloak</module>
+        <module>provided</module>
     </modules>
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
