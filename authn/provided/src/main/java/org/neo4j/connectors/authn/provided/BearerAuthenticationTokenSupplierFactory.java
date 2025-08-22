@@ -17,7 +17,6 @@
 package org.neo4j.connectors.authn.provided;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Supplier;
 import org.neo4j.connectors.authn.AuthenticationToken;
 import org.neo4j.connectors.authn.AuthenticationTokenSupplierFactory;
@@ -30,7 +29,7 @@ public class BearerAuthenticationTokenSupplierFactory implements AuthenticationT
 
     @Override
     public Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters) {
-        var token = Objects.requireNonNull(parameters.get("token"));
+        var token = parameters.get("token");
 
         var authenticationToken = AuthenticationToken.bearer(token);
         return () -> authenticationToken;
