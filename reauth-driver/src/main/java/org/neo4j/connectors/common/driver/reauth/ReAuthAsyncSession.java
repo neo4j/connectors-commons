@@ -137,14 +137,14 @@ public class ReAuthAsyncSession implements AsyncSession {
     private <T> CompletionStage<T> withExpiringAsyncSession(Supplier<CompletionStage<T>> block) {
         return driver.withRefreshAsync(block, () -> {
             log.debug("Creating new session to replace expired one");
-            var oldSession = delegate.getAndSet(sessionSupplier.get());
+            AsyncSession oldSession = delegate.getAndSet(sessionSupplier.get());
             return oldSession
                     .closeAsync()
                     .handle((v, e) -> {
                         if (e != null) {
                             log.debug("Failed to close async session", e);
                         }
-                        return CompletableFuture.completedStage(v);
+                        return CompletableFuture.completedFuture(v);
                     })
                     .thenCompose(Function.identity());
         });

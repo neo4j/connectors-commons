@@ -29,9 +29,9 @@ public class KerberosAuthenticationTokenSupplierFactory implements Authenticatio
 
     @Override
     public Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters) {
-        var ticket = parameters.get("ticket");
+        String ticket = parameters.get("ticket");
 
-        var authenticationToken = AuthenticationToken.kerberos(ticket);
+        AuthenticationToken authenticationToken = AuthenticationToken.kerberos(ticket);
         return () -> authenticationToken;
     }
 }

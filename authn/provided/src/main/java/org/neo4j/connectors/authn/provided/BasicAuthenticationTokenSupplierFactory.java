@@ -29,7 +29,7 @@ public class BasicAuthenticationTokenSupplierFactory implements AuthenticationTo
 
     @Override
     public Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters) {
-        var authenticationToken = AuthenticationToken.usernameAndPassword(username, password);
+        AuthenticationToken authenticationToken = AuthenticationToken.usernameAndPassword(username, password);
         return () -> authenticationToken;
     }
 }

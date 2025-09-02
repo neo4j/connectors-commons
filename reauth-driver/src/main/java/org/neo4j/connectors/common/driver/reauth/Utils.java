@@ -18,6 +18,8 @@ package org.neo4j.connectors.common.driver.reauth;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.slf4j.Logger;
 
 public final class Utils {
@@ -32,5 +34,11 @@ public final class Utils {
         } catch (Exception e) {
             log.debug("Failed to close resource", e);
         }
+    }
+
+    public static <T> CompletionStage<T> failedStage(Throwable ex) {
+        CompletableFuture<T> f = new CompletableFuture<>();
+        f.completeExceptionally(ex);
+        return f;
     }
 }
