@@ -139,7 +139,7 @@ public class ReAuthRxSession implements RxSession {
     <T> Publisher<T> withExpiringRxSession(Supplier<Publisher<T>> block, Runnable additionalRefresh) {
         return driver.withRxRefresh(block, () -> {
             log.debug("Creating new session to replace expired one");
-            var oldSession = delegate.getAndSet(sessionSupplier.get());
+            RxSession oldSession = delegate.getAndSet(sessionSupplier.get());
             return Mono.from(oldSession.close())
                     .then(Mono.<Void>fromRunnable(additionalRefresh))
                     .doOnError(e -> log.debug("Failed to close reactive session", e))

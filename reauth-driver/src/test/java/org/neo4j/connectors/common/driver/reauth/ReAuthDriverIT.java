@@ -25,8 +25,24 @@ import static reactor.core.publisher.Mono.*;
 
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -41,7 +57,13 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.authorization.client.Configuration;
 import org.neo4j.connectors.authn.BearerAuthenticationToken;
 import org.neo4j.connectors.authn.keycloak.KeycloakOIDCAuthenticationSupplier;
-import org.neo4j.driver.*;
+import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.Config;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.GraphDatabase;
+import org.neo4j.driver.Logging;
+import org.neo4j.driver.Session;
+import org.neo4j.driver.Transaction;
 import org.neo4j.driver.async.AsyncSession;
 import org.neo4j.driver.async.ResultCursor;
 import org.neo4j.driver.reactive.RxSession;
@@ -54,6 +76,8 @@ import reactor.core.publisher.Mono;
 
 @Testcontainers(disabledWithoutDocker = true)
 public class ReAuthDriverIT {
+
+    private static final ScheduledExecutorService SCHEDULER = Executors.newSingleThreadScheduledExecutor();
 
     private static final Duration SERVER_SIDE_TOKEN_LIFESPAN = Duration.ofSeconds(35);
 
@@ -69,11 +93,10 @@ public class ReAuthDriverIT {
             .withLogConsumer(outputFrame -> System.out.print(outputFrame.getUtf8String()));
 
     @SuppressWarnings("resource")
-    private static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(
-                    Optional.ofNullable(System.getProperty("neo4j-connectors-commons.default-neo4j-image"))
-                            .or(() -> Optional.of("neo4j:5.26"))
-                            .map(v -> !v.contains("-enterprise") ? v + "-enterprise" : v)
-                            .orElseThrow())
+    private static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(Optional.ofNullable(
+                            System.getProperty("neo4j-connectors-commons.default-neo4j-image", "neo4j:5.26"))
+                    .map(v -> !v.contains("-enterprise") ? v + "-enterprise" : v)
+                    .orElseThrow(() -> new NoSuchElementException("No value present")))
             .waitingFor(Neo4jContainer.WAIT_FOR_BOLT)
             .withNetwork(NETWORK)
             .withEnv("NEO4J_ACCEPT_LICENSE_AGREEMENT", "yes")
@@ -112,18 +135,18 @@ public class ReAuthDriverIT {
                 format("http://%s:%d", KEYCLOAK.getHost(), KEYCLOAK.getHttpPort()),
                 "neo4j-sso-test",
                 "neo4j-commons-client",
-                Map.of("secret", "QNrSpbh0mxhnlYlI21UcBaz3Htb734vi"),
+                mapOf("secret", "QNrSpbh0mxhnlYlI21UcBaz3Htb734vi"),
                 HttpClients.createMinimal());
         authenticationSupplier = (KeycloakOIDCAuthenticationSupplier)
                 KeycloakOIDCAuthenticationSupplier.of("john-tester", "testerpwd", authzConfiguration);
     }
 
     static Stream<Arguments> expiringMethods() {
-        var builder = Stream.<Arguments>builder();
+        Stream.Builder<Arguments> builder = Stream.<Arguments>builder();
 
         Consumer<Driver> sessionFunc = (Driver driver) -> {
-            try (var session = driver.session()) {
-                var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
+            try (Session session = driver.session()) {
+                Map<String, Object> params = mapOf("id", UUID.randomUUID().toString());
                 session.writeTransaction(tx ->
                         tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params).consume());
             }
@@ -131,7 +154,7 @@ public class ReAuthDriverIT {
         builder.add(Arguments.argumentSet("session", sessionFunc));
 
         Consumer<Driver> rxSessionFunc = (Driver driver) -> {
-            var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
+            Map<String, Object> params = mapOf("id", UUID.randomUUID().toString());
             Mono.usingWhen(
                             just(driver.rxSession()),
                             rxSession -> Mono.fromDirect(rxSession.writeTransaction(
@@ -143,8 +166,8 @@ public class ReAuthDriverIT {
         builder.add(Arguments.argumentSet("rxSession", rxSessionFunc));
 
         Consumer<Driver> sessionAsyncFunc = (Driver driver) -> {
-            var params = Map.<String, Object>of("id", UUID.randomUUID().toString());
-            var asyncSession = driver.asyncSession();
+            Map<String, Object> params = mapOf("id", UUID.randomUUID().toString());
+            AsyncSession asyncSession = driver.asyncSession();
             asyncSession
                     .writeTransactionAsync(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params))
                     .whenComplete((result, error) -> asyncSession.closeAsync())
@@ -160,8 +183,8 @@ public class ReAuthDriverIT {
     @MethodSource("expiringMethods")
     void reAuthDriverReturnsSessionWithRefreshedToken(Consumer<Driver> func) {
         // given
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        List<Driver> driversLog = new CopyOnWriteArrayList<Driver>();
+        try (Driver driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -188,8 +211,8 @@ public class ReAuthDriverIT {
     void reAuthDriverRefreshesTokensWhenUsedConcurrently(Consumer<Driver> func)
             throws InterruptedException, ExecutionException {
         // given
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
+        List<Driver> driversLog = new CopyOnWriteArrayList<Driver>();
+        try (Driver driver = new ReAuthDriver(driverSupplier(driversLog))) {
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -200,7 +223,7 @@ public class ReAuthDriverIT {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
             // when
-            var executor = Executors.newFixedThreadPool(10);
+            ExecutorService executor = Executors.newFixedThreadPool(10);
             try {
                 List<Callable<Void>> jobs = IntStream.range(0, 20)
                         .mapToObj(i -> (Callable<Void>) () -> {
@@ -208,7 +231,7 @@ public class ReAuthDriverIT {
                             return null;
                         })
                         .collect(Collectors.toList());
-                var futures = executor.invokeAll(jobs);
+                List<Future<Void>> futures = executor.invokeAll(jobs);
                 for (Future<Void> future : futures) {
                     future.get();
                 }
@@ -229,8 +252,8 @@ public class ReAuthDriverIT {
     @MethodSource("expiringMethods")
     void reAuthDriverCleansUpExpiredDrivers(Consumer<Driver> func) {
         // given
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
+        List<Driver> driversLog = new CopyOnWriteArrayList<Driver>();
+        try (ReAuthDriver driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -259,8 +282,8 @@ public class ReAuthDriverIT {
     void reAuthDriverCleansUpExpiredDriversWhileBeingUsed(Consumer<Driver> func)
             throws InterruptedException, ExecutionException {
         // given
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
+        List<Driver> driversLog = new CopyOnWriteArrayList<Driver>();
+        try (ReAuthDriver driver = new ReAuthDriver(driverSupplier(driversLog), 500)) {
             func.accept(driver);
             assertThat(driversLog)
                     .overridingErrorMessage(() -> format(
@@ -270,7 +293,7 @@ public class ReAuthDriverIT {
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
-            var executor = Executors.newFixedThreadPool(10);
+            ExecutorService executor = Executors.newFixedThreadPool(10);
 
             List<Callable<Void>> jobs = IntStream.range(0, 20)
                     .mapToObj(i -> (Callable<Void>) () -> {
@@ -289,7 +312,7 @@ public class ReAuthDriverIT {
 
             // when
             try {
-                var futures = executor.invokeAll(jobs);
+                List<Future<Void>> futures = executor.invokeAll(jobs);
                 for (Future<Void> future : futures) {
                     future.get();
                 }
@@ -308,12 +331,12 @@ public class ReAuthDriverIT {
     }
 
     static Stream<Arguments> sessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
-        var builder = Stream.<Arguments>builder();
+        Stream.Builder<Arguments> builder = Stream.builder();
         Consumer<Session> write = (Session session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
-            var actualId = session.writeTransaction(tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
+            String actualId = session.writeTransaction(tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
                     .single()
                     .get(0)
                     .asString());
@@ -323,7 +346,7 @@ public class ReAuthDriverIT {
 
         Consumer<Session> read = (Session session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actual = session.readTransaction(
+            long actual = session.readTransaction(
                     tx -> tx.run("RETURN 42").single().get(0).asLong());
             assertThat(actual).isEqualTo(42L);
         };
@@ -331,18 +354,18 @@ public class ReAuthDriverIT {
 
         Consumer<Session> run = (Session session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actual = session.run("RETURN 42").single().get(0).asLong();
+            long actual = session.run("RETURN 42").single().get(0).asLong();
             assertThat(actual).isEqualTo(42L);
         };
         builder.add(Arguments.argumentSet("run", run));
 
         Consumer<Session> transaction = (Session session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
-            var tx = session.beginTransaction();
-            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+            Transaction tx = session.beginTransaction();
+            String actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
                     .single()
                     .get(0)
                     .asString();
@@ -352,14 +375,14 @@ public class ReAuthDriverIT {
         builder.add(Arguments.argumentSet("transaction", transaction));
 
         Consumer<Session> openTransaction = (Session session) -> {
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
-            var tx = session.beginTransaction();
+            Transaction tx = session.beginTransaction();
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
 
-            var actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
+            String actual = tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
                     .single()
                     .get(0)
                     .asString();
@@ -374,22 +397,22 @@ public class ReAuthDriverIT {
     @ParameterizedTest
     @MethodSource
     void sessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<Session> methodTest) {
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
-            try (var session = driver.session()) {
+        List<Driver> driversLog = new CopyOnWriteArrayList<Driver>();
+        try (Driver driver = new ReAuthDriver(driverSupplier(driversLog))) {
+            try (Session session = driver.session()) {
                 methodTest.accept(session);
             }
         }
     }
 
     static Stream<Arguments> rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
-        var builder = Stream.<Arguments>builder();
+        Stream.Builder<Arguments> builder = Stream.builder();
         Consumer<RxSession> write = (RxSession session) -> {
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actualId = usingWhen(
+            String actualId = usingWhen(
                             just(session),
                             rxSession -> from(rxSession.writeTransaction(
                                     tx -> tx.run("MERGE (t:Test {id: $id}) RETURN t.id", params)
@@ -404,7 +427,7 @@ public class ReAuthDriverIT {
 
         Consumer<RxSession> read = (RxSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actual = usingWhen(
+            long actual = usingWhen(
                             just(session),
                             rxSession -> from(rxSession.readTransaction(
                                     tx -> tx.run("RETURN 42").records())),
@@ -418,7 +441,7 @@ public class ReAuthDriverIT {
 
         Consumer<RxSession> run = (RxSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var actual = usingWhen(
+            long actual = usingWhen(
                             just(session),
                             rxSession -> from(rxSession.run("RETURN 42").records()),
                             RxSession::close)
@@ -431,10 +454,10 @@ public class ReAuthDriverIT {
 
         Consumer<RxSession> transaction = (RxSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
-            var actual = usingWhen(
+            String actual = usingWhen(
                             just(session),
                             rxSession -> from(rxSession.beginTransaction())
                                     .flatMap(tx -> usingWhen(
@@ -451,10 +474,10 @@ public class ReAuthDriverIT {
         builder.add(Arguments.argumentSet("transaction", transaction));
 
         Consumer<RxSession> openTransaction = (RxSession session) -> {
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
-            var actual = usingWhen(
+            String actual = usingWhen(
                             just(session),
                             rxSession -> from(rxSession.beginTransaction())
                                     .flatMap(tx -> usingWhen(
@@ -480,9 +503,9 @@ public class ReAuthDriverIT {
     @MethodSource
     void rxSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<RxSession> methodTest) {
         // given
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
-            var rxSession = driver.rxSession();
+        List<Driver> driversLog = new CopyOnWriteArrayList<Driver>();
+        try (Driver driver = new ReAuthDriver(driverSupplier(driversLog))) {
+            RxSession rxSession = driver.rxSession();
 
             // when and then
             methodTest.accept(rxSession);
@@ -490,14 +513,14 @@ public class ReAuthDriverIT {
     }
 
     static Stream<Arguments> asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires() {
-        var builder = Stream.<Arguments>builder();
+        Stream.Builder<Arguments> builder = Stream.<Arguments>builder();
         Consumer<AsyncSession> write = (AsyncSession session) -> {
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
             try {
-                var actualId = session.writeTransactionAsync(
+                String actualId = session.writeTransactionAsync(
                                 tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
                                         .thenCompose(ResultCursor::singleAsync)
                                         .thenApply(r -> r.get(0).asString()))
@@ -514,7 +537,7 @@ public class ReAuthDriverIT {
         Consumer<AsyncSession> read = (AsyncSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
             try {
-                var actual = session.readTransactionAsync(tx -> tx.runAsync("RETURN 42")
+                long actual = session.readTransactionAsync(tx -> tx.runAsync("RETURN 42")
                                 .thenCompose(ResultCursor::singleAsync)
                                 .thenApply(r -> r.get(0).asLong()))
                         .whenComplete((result, error) -> session.closeAsync())
@@ -530,7 +553,7 @@ public class ReAuthDriverIT {
         Consumer<AsyncSession> run = (AsyncSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
             try {
-                var actual = session.runAsync("RETURN 42")
+                long actual = session.runAsync("RETURN 42")
                         .thenCompose(ResultCursor::singleAsync)
                         .thenApply(r -> r.get(0).asLong())
                         .whenComplete((result, error) -> session.closeAsync())
@@ -545,11 +568,11 @@ public class ReAuthDriverIT {
 
         Consumer<AsyncSession> transaction = (AsyncSession session) -> {
             sleep(SERVER_SIDE_TOKEN_LIFESPAN);
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
             try {
-                var actualId = session.beginTransactionAsync()
+                String actualId = session.beginTransactionAsync()
                         .thenCompose(tx -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
                                 .thenCompose(ResultCursor::singleAsync)
                                 .whenComplete((result, error) -> {
@@ -571,11 +594,11 @@ public class ReAuthDriverIT {
         builder.add(Arguments.argumentSet("transaction", transaction));
 
         Consumer<AsyncSession> openTransaction = (AsyncSession session) -> {
-            var expectedId = UUID.randomUUID().toString();
-            var params = Map.<String, Object>of("id", expectedId);
+            String expectedId = UUID.randomUUID().toString();
+            Map<String, Object> params = mapOf("id", expectedId);
 
             try {
-                var actualId = session.beginTransactionAsync()
+                String actualId = session.beginTransactionAsync()
                         .thenCompose(tx -> delayAsync(SERVER_SIDE_TOKEN_LIFESPAN)
                                 .thenCompose(v -> tx.runAsync("MERGE (t:Test {id: $id}) RETURN t.id", params)
                                         .thenCompose(ResultCursor::singleAsync)
@@ -604,9 +627,9 @@ public class ReAuthDriverIT {
     @MethodSource
     void asyncSessionObtainedByDriverIsKeptActiveAfterTokenExpires(Consumer<AsyncSession> methodTest) {
         // given
-        var driversLog = new CopyOnWriteArrayList<Driver>();
-        try (var driver = new ReAuthDriver(driverSupplier(driversLog))) {
-            var asyncSession = driver.asyncSession();
+        List<Driver> driversLog = new CopyOnWriteArrayList<Driver>();
+        try (Driver driver = new ReAuthDriver(driverSupplier(driversLog))) {
+            AsyncSession asyncSession = driver.asyncSession();
 
             // when and then
             methodTest.accept(asyncSession);
@@ -615,12 +638,12 @@ public class ReAuthDriverIT {
 
     private static Supplier<Driver> driverSupplier(List<Driver> driversLog) {
         return () -> {
-            var config = Config.builder()
+            Config config = Config.builder()
                     .withMaxConnectionLifetime(2, TimeUnit.SECONDS)
                     .withLogging(Logging.slf4j())
                     .build();
-            var token = (BearerAuthenticationToken) authenticationSupplier.get();
-            var driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), config);
+            BearerAuthenticationToken token = (BearerAuthenticationToken) authenticationSupplier.get();
+            Driver driver = GraphDatabase.driver(NEO4J.getBoltUrl(), AuthTokens.bearer(token.getToken()), config);
             driversLog.add(driver);
             return driver;
         };
@@ -635,8 +658,22 @@ public class ReAuthDriverIT {
     }
 
     static CompletionStage<Void> delayAsync(Duration duration) {
-        return CompletableFuture.runAsync(
-                () -> {}, CompletableFuture.delayedExecutor(duration.toMillis(), TimeUnit.MILLISECONDS));
+        CompletableFuture<Void> cFuture = new CompletableFuture<>();
+        ScheduledFuture<?> scheduled =
+                SCHEDULER.schedule(() -> cFuture.complete(null), duration.toMillis(), TimeUnit.MILLISECONDS);
+
+        cFuture.whenComplete((r, e) -> {
+            if (cFuture.isCancelled()) {
+                scheduled.cancel(false);
+            }
+        });
+        return cFuture;
+    }
+
+    static <K, V> Map<K, V> mapOf(K key, V value) {
+        Map<K, V> map = new HashMap<>(1);
+        map.put(key, value);
+        return map;
     }
 
     @AfterAll
@@ -644,5 +681,6 @@ public class ReAuthDriverIT {
         NEO4J.stop();
         KEYCLOAK.stop();
         NETWORK.close();
+        SCHEDULER.shutdownNow();
     }
 }

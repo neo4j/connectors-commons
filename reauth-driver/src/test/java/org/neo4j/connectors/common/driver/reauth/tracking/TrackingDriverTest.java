@@ -45,19 +45,19 @@ public class TrackingDriverTest {
     @Test
     void trackingDriverTracksSession() {
         // given
-        var trackingDriver = new TrackingDriver(driver);
-        var session1 = mock(Session.class);
-        var session2 = mock(Session.class);
+        TrackingDriver trackingDriver = new TrackingDriver(driver);
+        Session session1 = mock(Session.class);
+        Session session2 = mock(Session.class);
         given(driver.session(any(SessionConfig.class))).willReturn(session1, session2);
 
         doNothing().when(session1).close();
         doNothing().when(session2).close();
 
         // when and then
-        var trackedSession1 = trackingDriver.session();
+        Session trackedSession1 = trackingDriver.session();
         assertThat(trackingDriver.getOpenSessionCount()).isEqualTo(1);
 
-        var trackedSession2 = trackingDriver.session(SessionConfig.defaultConfig());
+        Session trackedSession2 = trackingDriver.session(SessionConfig.defaultConfig());
         assertThat(trackingDriver.getOpenSessionCount()).isEqualTo(2);
 
         trackedSession1.close();
@@ -70,19 +70,19 @@ public class TrackingDriverTest {
     @Test
     void trackingDriverTracksRxSession() {
         // given
-        var trackingDriver = new TrackingDriver(driver);
-        var session1 = mock(RxSession.class);
-        var session2 = mock(RxSession.class);
+        TrackingDriver trackingDriver = new TrackingDriver(driver);
+        RxSession session1 = mock(RxSession.class);
+        RxSession session2 = mock(RxSession.class);
         given(driver.rxSession(any(SessionConfig.class))).willReturn(session1, session2);
 
         given(session1.close()).willReturn(just(""));
         given(session2.close()).willReturn(just(""));
 
         // when and then
-        var trackedSession1 = trackingDriver.rxSession();
+        RxSession trackedSession1 = trackingDriver.rxSession();
         assertThat(trackingDriver.getOpenSessionCount()).isEqualTo(1);
 
-        var trackedSession2 = trackingDriver.rxSession(SessionConfig.defaultConfig());
+        RxSession trackedSession2 = trackingDriver.rxSession(SessionConfig.defaultConfig());
         assertThat(trackingDriver.getOpenSessionCount()).isEqualTo(2);
 
         from(trackedSession1.close()).block();
@@ -95,19 +95,19 @@ public class TrackingDriverTest {
     @Test
     void trackingDriverTracksAsyncSession() throws ExecutionException, InterruptedException {
         // given
-        var trackingDriver = new TrackingDriver(driver);
-        var session1 = mock(AsyncSession.class);
-        var session2 = mock(AsyncSession.class);
+        TrackingDriver trackingDriver = new TrackingDriver(driver);
+        AsyncSession session1 = mock(AsyncSession.class);
+        AsyncSession session2 = mock(AsyncSession.class);
         given(driver.asyncSession(any(SessionConfig.class))).willReturn(session1, session2);
 
-        given(session1.closeAsync()).willReturn(CompletableFuture.completedStage(null));
-        given(session2.closeAsync()).willReturn(CompletableFuture.completedStage(null));
+        given(session1.closeAsync()).willReturn(CompletableFuture.completedFuture(null));
+        given(session2.closeAsync()).willReturn(CompletableFuture.completedFuture(null));
 
         // when and then
-        var trackedSession1 = trackingDriver.asyncSession();
+        AsyncSession trackedSession1 = trackingDriver.asyncSession();
         assertThat(trackingDriver.getOpenSessionCount()).isEqualTo(1);
 
-        var trackedSession2 = trackingDriver.asyncSession(SessionConfig.defaultConfig());
+        AsyncSession trackedSession2 = trackingDriver.asyncSession(SessionConfig.defaultConfig());
         assertThat(trackingDriver.getOpenSessionCount()).isEqualTo(2);
 
         trackedSession1.closeAsync().toCompletableFuture().get();

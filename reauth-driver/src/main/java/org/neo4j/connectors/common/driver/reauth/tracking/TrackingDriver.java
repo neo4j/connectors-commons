@@ -47,7 +47,7 @@ public class TrackingDriver implements Driver {
 
     @Override
     public Session session(SessionConfig sessionConfig) {
-        var session = delegate.session(sessionConfig);
+        Session session = delegate.session(sessionConfig);
         sessionCount.incrementAndGet();
         return new TrackedSession(this, session);
     }
@@ -59,7 +59,7 @@ public class TrackingDriver implements Driver {
 
     @Override
     public RxSession rxSession(SessionConfig sessionConfig) {
-        var session = delegate.rxSession(sessionConfig);
+        RxSession session = delegate.rxSession(sessionConfig);
         sessionCount.incrementAndGet();
         return new TrackedRxSession(this, session);
     }
@@ -71,7 +71,7 @@ public class TrackingDriver implements Driver {
 
     @Override
     public AsyncSession asyncSession(SessionConfig sessionConfig) {
-        var session = delegate.asyncSession(sessionConfig);
+        AsyncSession session = delegate.asyncSession(sessionConfig);
         sessionCount.incrementAndGet();
         return new TrackedAsyncSession(this, session);
     }

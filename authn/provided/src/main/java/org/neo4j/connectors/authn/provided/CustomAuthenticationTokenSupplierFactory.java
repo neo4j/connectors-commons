@@ -29,12 +29,12 @@ public class CustomAuthenticationTokenSupplierFactory implements AuthenticationT
 
     @Override
     public Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters) {
-        var principal = parameters.get("principal");
-        var credentials = parameters.get("credentials");
-        var realm = parameters.get("realm");
-        var scheme = parameters.get("scheme");
+        String principal = parameters.get("principal");
+        String credentials = parameters.get("credentials");
+        String realm = parameters.get("realm");
+        String scheme = parameters.get("scheme");
 
-        var authenticationToken = AuthenticationToken.custom(principal, credentials, realm, scheme);
+        AuthenticationToken authenticationToken = AuthenticationToken.custom(principal, credentials, realm, scheme);
         return () -> authenticationToken;
     }
 }

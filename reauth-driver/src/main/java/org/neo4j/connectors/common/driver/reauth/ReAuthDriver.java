@@ -124,7 +124,7 @@ public class ReAuthDriver implements Driver {
 
     @Override
     public CompletionStage<Void> closeAsync() {
-        var closeAsync = currentDriver.get().closeAsync();
+        CompletionStage<Void> closeAsync = currentDriver.get().closeAsync();
         return expiredDrivers.stream()
                 .map(Driver::closeAsync)
                 .reduce(closeAsync, (acc, ca) -> acc.thenCombine(ca, (a, b) -> b));
@@ -166,7 +166,7 @@ public class ReAuthDriver implements Driver {
     }
 
     void cleanUpExpiredDrivers() {
-        var driverWithNoConnections = expiredDrivers.stream()
+        List<TrackingDriver> driverWithNoConnections = expiredDrivers.stream()
                 .filter(driver -> driver.getOpenSessionCount() == 0)
                 .collect(Collectors.toList());
         driverWithNoConnections.forEach(Utils::closeQuietly);
@@ -187,7 +187,7 @@ public class ReAuthDriver implements Driver {
     }
 
     <T> T withRefresh(Supplier<T> block, Runnable refresh) {
-        var driverHashCode = System.identityHashCode(currentDriver.get());
+        int driverHashCode = System.identityHashCode(currentDriver.get());
         try {
             return block.get();
         } catch (SecurityException e) {
@@ -202,7 +202,7 @@ public class ReAuthDriver implements Driver {
 
     <T> Publisher<T> withRxRefresh(Supplier<Publisher<T>> block, Supplier<Publisher<Void>> refresh) {
         return Mono.defer(() -> {
-            var driverHashCode = System.identityHashCode(currentDriver.get());
+            int driverHashCode = System.identityHashCode(currentDriver.get());
             return Mono.from(block.get())
                     .onErrorResume(SecurityException.class, e -> Mono.fromRunnable(() -> withLock(() -> {
                                 log.debug("Caught authentication exception. Try to refresh the driver and retry.");
@@ -215,11 +215,11 @@ public class ReAuthDriver implements Driver {
 
     <T> CompletionStage<T> withRefreshAsync(
             Supplier<CompletionStage<T>> block, Supplier<CompletionStage<Void>> refresh) {
-        var driverHashCode = System.identityHashCode(currentDriver.get());
+        int driverHashCode = System.identityHashCode(currentDriver.get());
         return block.get()
                 .handle((value, e) -> {
                     if (e == null) {
-                        return CompletableFuture.completedStage(value);
+                        return CompletableFuture.completedFuture(value);
                     }
                     if (e instanceof SecurityException || e.getCause() instanceof SecurityException) {
                         return CompletableFuture.runAsync(() -> withLock(() -> {
@@ -229,7 +229,7 @@ public class ReAuthDriver implements Driver {
                                 .thenCompose(vd -> refresh.get())
                                 .thenCompose(vd -> block.get());
                     }
-                    return CompletableFuture.<T>failedStage(e);
+                    return Utils.<T>failedStage(e);
                 })
                 .thenCompose(Function.identity());
     }

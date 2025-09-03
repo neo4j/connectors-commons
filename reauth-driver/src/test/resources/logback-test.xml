@@ -11,9 +11,9 @@
         </encoder>
     </appender>
 
-    <logger name="org.neo4j" level="DEBUG"/>
+    <logger name="org.neo4j" level="WARN"/>
 
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="STDOUT_TXT"/>
     </root>
 </configuration>

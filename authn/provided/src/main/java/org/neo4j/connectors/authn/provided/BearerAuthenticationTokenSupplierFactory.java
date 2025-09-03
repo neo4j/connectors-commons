@@ -29,9 +29,9 @@ public class BearerAuthenticationTokenSupplierFactory implements AuthenticationT
 
     @Override
     public Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters) {
-        var token = parameters.get("token");
+        String token = parameters.get("token");
 
-        var authenticationToken = AuthenticationToken.bearer(token);
+        AuthenticationToken authenticationToken = AuthenticationToken.bearer(token);
         return () -> authenticationToken;
     }
 }

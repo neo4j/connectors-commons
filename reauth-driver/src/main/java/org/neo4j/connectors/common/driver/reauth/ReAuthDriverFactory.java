@@ -50,15 +50,15 @@ public final class ReAuthDriverFactory {
     }
 
     public static Driver driver(URI uri, Supplier<AuthenticationToken> authTokenSupplier, Config config) {
-        var authenticationToken = authTokenSupplier.get();
-        var originalDriver = GraphDatabase.driver(uri, convertToAuthToken(authenticationToken), config);
+        AuthenticationToken authenticationToken = authTokenSupplier.get();
+        Driver originalDriver = GraphDatabase.driver(uri, convertToAuthToken(authenticationToken), config);
 
         if (!(authenticationToken instanceof ExpiringAuthenticationToken)) {
             return originalDriver;
         }
 
         Supplier<Driver> refresher = () -> {
-            var refreshedToken = authTokenSupplier.get();
+            AuthenticationToken refreshedToken = authTokenSupplier.get();
             return GraphDatabase.driver(uri, convertToAuthToken(refreshedToken), config);
         };
         return new ReAuthDriver(originalDriver, refresher);
@@ -66,15 +66,16 @@ public final class ReAuthDriverFactory {
 
     private static AuthToken convertToAuthToken(AuthenticationToken token) throws IllegalArgumentException {
         if (token instanceof BearerAuthenticationToken) {
-            var bearerToken = (BearerAuthenticationToken) token;
+            BearerAuthenticationToken bearerToken = (BearerAuthenticationToken) token;
             return AuthTokens.bearer(bearerToken.getToken());
         }
         if (token instanceof KerberosAuthenticationToken) {
-            var kerberosToken = (KerberosAuthenticationToken) token;
+            KerberosAuthenticationToken kerberosToken = (KerberosAuthenticationToken) token;
             return AuthTokens.kerberos(kerberosToken.getToken());
         }
         if (token instanceof UserNameAndPasswordAuthenticationToken) {
-            var userNameAndPasswordToken = (UserNameAndPasswordAuthenticationToken) token;
+            UserNameAndPasswordAuthenticationToken userNameAndPasswordToken =
+                    (UserNameAndPasswordAuthenticationToken) token;
             return AuthTokens.basic(
                     userNameAndPasswordToken.getUsername(),
                     userNameAndPasswordToken.getPassword(),
@@ -84,7 +85,7 @@ public final class ReAuthDriverFactory {
             return AuthTokens.none();
         }
         if (token instanceof CustomAuthenticationToken) {
-            var customToken = (CustomAuthenticationToken) token;
+            CustomAuthenticationToken customToken = (CustomAuthenticationToken) token;
             return AuthTokens.custom(
                     customToken.getPrincipal(),
                     customToken.getCredentials(),

@@ -12,8 +12,7 @@
     <name>commons-reauth-driver</name>
     <description>Wrapper Neo4j Java Driver that supports reauthentication</description>
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.release>8</maven.compiler.release>
         <neo4j-driver.version>4.4.20</neo4j-driver.version>
     </properties>
     <dependencies>

@@ -16,6 +16,7 @@
  */
 package org.neo4j.connectors.authn.keycloak;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -37,14 +38,15 @@ public class KeycloakOIDCAuthenticationSupplierFactory implements Authentication
     @Override
     public Supplier<AuthenticationToken> create(String username, String password, Map<String, String> parameters) {
         // make sure parameters are passed
-        var url = Objects.requireNonNull(parameters.get("authServerUrl"));
-        var realm = Objects.requireNonNull(parameters.get("realm"));
-        var clientId = Objects.requireNonNull(parameters.get("clientId"));
-        var clientSecret = Objects.requireNonNull(parameters.get("clientSecret"));
+        String url = Objects.requireNonNull(parameters.get("authServerUrl"));
+        String realm = Objects.requireNonNull(parameters.get("realm"));
+        String clientId = Objects.requireNonNull(parameters.get("clientId"));
+        String clientSecret = Objects.requireNonNull(parameters.get("clientSecret"));
+
+        Map<String, Object> credentials = new HashMap<>(1);
+        credentials.put("secret", clientSecret);
 
         return new KeycloakOIDCAuthenticationSupplier(
-                username,
-                password,
-                new Configuration(url, realm, clientId, Map.of("secret", clientSecret), HttpClients.createMinimal()));
+                username, password, new Configuration(url, realm, clientId, credentials, HttpClients.createMinimal()));
     }
 }
