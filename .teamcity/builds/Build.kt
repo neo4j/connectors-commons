@@ -28,9 +28,8 @@ class Build(
                   Maven(
                       "${name}-build-${java}",
                       "build - java ${java}",
-                      "sortpom:verify license:check spotless:check compile",
-                      "-DspotlessFiles=src/main/java/.*.java",
-                      java))
+                      "sortpom:verify license:check compile",
+                      javaVersion = java))
               dependentBuildType(
                   Maven(
                       "${name}-test-${java}",
