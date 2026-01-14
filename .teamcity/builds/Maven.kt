@@ -1,6 +1,7 @@
 package builds
 
 import jetbrains.buildServer.configs.kotlin.BuildType
+import jetbrains.buildServer.configs.kotlin.buildSteps.MavenBuildStep
 import jetbrains.buildServer.configs.kotlin.toId
 
 open class Maven(
@@ -9,7 +10,8 @@ open class Maven(
     goals: String,
     args: String? = null,
     javaVersion: String = DEFAULT_JAVA_VERSION,
-    size: LinuxSize = LinuxSize.SMALL
+    size: LinuxSize = LinuxSize.SMALL,
+    mavenVersion: MavenBuildStep.MavenVersion? = null,
 ) :
     BuildType({
       this.id(id.toId())
@@ -17,6 +19,7 @@ open class Maven(
 
       steps {
         runMaven(javaVersion) {
+          this.mavenVersion = mavenVersion
           this.goals = goals
           this.runnerArgs = "$MAVEN_DEFAULT_ARGS ${args ?: ""}"
         }
