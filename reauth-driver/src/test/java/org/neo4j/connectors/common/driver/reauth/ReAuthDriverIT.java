@@ -68,9 +68,9 @@ import org.neo4j.driver.async.AsyncSession;
 import org.neo4j.driver.async.ResultCursor;
 import org.neo4j.driver.reactive.RxSession;
 import org.neo4j.driver.reactive.RxTransaction;
-import org.testcontainers.containers.Neo4jContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.neo4j.Neo4jContainer;
 import org.testcontainers.utility.MountableFile;
 import reactor.core.publisher.Mono;
 
@@ -92,8 +92,7 @@ public class ReAuthDriverIT {
             .withEnv("KC_HOSTNAME_BACKCHANNEL_DYNAMIC", "true")
             .withLogConsumer(outputFrame -> System.out.print(outputFrame.getUtf8String()));
 
-    @SuppressWarnings("resource")
-    private static final Neo4jContainer<?> NEO4J = new Neo4jContainer<>(Optional.ofNullable(
+    private static final Neo4jContainer NEO4J = new Neo4jContainer(Optional.ofNullable(
                             System.getProperty("neo4j-connectors-commons.default-neo4j-image", "neo4j:5.26"))
                     .map(v -> !v.contains("-enterprise") ? v + "-enterprise" : v)
                     .orElseThrow(() -> new NoSuchElementException("No value present")))
