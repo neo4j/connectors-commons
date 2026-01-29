@@ -46,7 +46,7 @@
         <junit-bom.version>5.14.2</junit-bom.version>
         <keycloak.version>26.0.8</keycloak.version>
         <license.id>neo4j_apache_v2</license.id>
-        <logback.version>1.5.25</logback.version>
+        <logback.version>1.5.26</logback.version>
         <maven.compiler.release>11</maven.compiler.release>
         <mockito.version>5.21.0</mockito.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
