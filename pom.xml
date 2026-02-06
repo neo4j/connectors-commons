@@ -39,7 +39,7 @@
         <url>https://github.com/neo4j/connectors-commons</url>
     </scm>
     <properties>
-        <assertj-core.version>3.27.6</assertj-core.version>
+        <assertj-core.version>3.27.7</assertj-core.version>
         <awaitility.version>4.3.0</awaitility.version>
         <jackson.version>2.21.0</jackson.version>
         <jboss-logging.version>3.6.2.Final</jboss-logging.version>
