@@ -41,7 +41,7 @@
     <properties>
         <assertj-core.version>3.27.7</assertj-core.version>
         <awaitility.version>4.3.0</awaitility.version>
-        <jackson.version>2.21.0</jackson.version>
+        <jackson.version>2.21.1</jackson.version>
         <jboss-logging.version>3.6.2.Final</jboss-logging.version>
         <junit-bom.version>5.14.2</junit-bom.version>
         <keycloak.version>26.0.8</keycloak.version>
