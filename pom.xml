@@ -42,17 +42,17 @@
         <assertj-core.version>3.27.7</assertj-core.version>
         <awaitility.version>4.3.0</awaitility.version>
         <jackson.version>2.21.1</jackson.version>
-        <jboss-logging.version>3.6.2.Final</jboss-logging.version>
+        <jboss-logging.version>3.6.3.Final</jboss-logging.version>
         <junit-bom.version>5.14.3</junit-bom.version>
         <keycloak.version>26.0.8</keycloak.version>
         <license.id>neo4j_apache_v2</license.id>
         <logback.version>1.5.32</logback.version>
         <maven.compiler.release>11</maven.compiler.release>
-        <mockito.version>5.21.0</mockito.version>
+        <mockito.version>5.23.0</mockito.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <slf4j.version>2.0.17</slf4j.version>
-        <testcontainers-bom.version>2.0.3</testcontainers-bom.version>
-        <testcontainers-keycloak.version>4.1.1</testcontainers-keycloak.version>
+        <testcontainers-bom.version>2.0.4</testcontainers-bom.version>
+        <testcontainers-keycloak.version>4.2.0</testcontainers-keycloak.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -154,7 +154,7 @@
                 </plugin>
                 <plugin>
                     <artifactId>maven-resources-plugin</artifactId>
-                    <version>3.4.0</version>
+                    <version>3.5.0</version>
                 </plugin>
                 <plugin>
                     <artifactId>maven-compiler-plugin</artifactId>

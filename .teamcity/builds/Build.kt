@@ -24,19 +24,19 @@ class Build(
         parallel {
           dependentBuildType(SemgrepCheck("${name}-semgrep-check", "semgrep check"))
 
-          listOf("11", "17", "21").forEach { java ->
+          JavaVersion.entries.forEach { java ->
             sequential {
               dependentBuildType(
                   Maven(
-                      "${name}-build-${java}",
-                      "build - java ${java}",
+                      "${name}-build-${java.version}",
+                      "build - java ${java.version}",
                       "sortpom:verify license:check spotless:check compile",
                       "-DspotlessFiles=src/main/java/.*.java",
                       java))
               dependentBuildType(
                   Maven(
-                      "${name}-test-${java}",
-                      "test - java ${java}",
+                      "${name}-test-${java.version}",
+                      "test - java ${java.version}",
                       "verify",
                       javaVersion = java,
                       size = LinuxSize.LARGE))
@@ -52,6 +52,7 @@ class Build(
         it.thisVcs()
 
         it.features {
+          authenticateToECR()
           enableCommitStatusPublisher()
           if (forPullRequests) enablePullRequests()
         }
