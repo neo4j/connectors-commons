@@ -130,12 +130,12 @@
             <dependency>
                 <groupId>org.neo4j.connectors</groupId>
                 <artifactId>commons-authn-keycloak</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.neo4j.connectors</groupId>
                 <artifactId>commons-authn-spi</artifactId>
-                <version>${version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.slf4j</groupId>
