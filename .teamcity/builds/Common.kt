@@ -27,6 +27,10 @@ enum class JavaVersion(val version: String, val dockerImage: String) {
   V_21(version = "21", dockerImage = "%ecr-registry-connectors%:jdk-21-latest"),
 }
 
+const val ECR_CONNECTION_ID_ENG = "PROJECT_EXT_124"
+const val ECR_CONNECTION_ID_BUILD = "PROJECT_EXT_107"
+val DOCKER_REGISTRIES = sequenceOf(ECR_CONNECTION_ID_ENG, ECR_CONNECTION_ID_BUILD)
+
 enum class LinuxSize(val value: String) {
   SMALL("small"),
   LARGE("large")
@@ -58,9 +62,9 @@ fun BuildFeatures.enablePullRequests() = pullRequests {
   }
 }
 
-fun BuildFeatures.authenticateToECR() = dockerRegistryConnections {
-  loginToRegistry = on { dockerRegistryId = "PROJECT_EXT_107" }
+fun BuildFeatures.loginToECR() = dockerRegistryConnections {
   cleanupPushedImages = true
+  loginToRegistry = on { dockerRegistryId = DOCKER_REGISTRIES.joinToString(",") }
 }
 
 fun CompoundStage.dependentBuildType(bt: BuildType) =

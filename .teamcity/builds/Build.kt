@@ -52,7 +52,7 @@ class Build(
         it.thisVcs()
 
         it.features {
-          authenticateToECR()
+          loginToECR()
           enableCommitStatusPublisher()
           if (forPullRequests) enablePullRequests()
         }
