@@ -13,7 +13,7 @@
     <description>Wrapper Neo4j Java Driver that supports reauthentication</description>
     <properties>
         <maven.compiler.release>8</maven.compiler.release>
-        <neo4j-driver.version>4.4.26</neo4j-driver.version>
+        <neo4j-driver.version>4.4.27</neo4j-driver.version>
     </properties>
     <dependencies>
         <dependency>
