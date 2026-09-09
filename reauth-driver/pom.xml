@@ -87,8 +87,9 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
                     <includes>
-                        <include>**/*IT.*</include>
+                        <include>**/*IT</include>
                     </includes>
+                    <failIfNoTests>true</failIfNoTests>
                     <systemProperties>
                         <neo4j-connectors-commons.default-neo4j-image>neo4j:5.26.9</neo4j-connectors-commons.default-neo4j-image>
                     </systemProperties>
