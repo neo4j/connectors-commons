@@ -25,5 +25,5 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: "build(repo)"
-      prefix-development: "build(repo"
+      prefix-development: "build(repo)"
       include: "scope"
