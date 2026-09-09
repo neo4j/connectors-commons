@@ -1,0 +1,5 @@
+org.neo4j.connectors.driver.auth.provided.BasicAuthTokenManagerFactory
+org.neo4j.connectors.driver.auth.provided.BearerAuthTokenManagerFactory
+org.neo4j.connectors.driver.auth.provided.CustomAuthTokenManagerFactory
+org.neo4j.connectors.driver.auth.provided.KerberosAuthTokenManagerFactory
+org.neo4j.connectors.driver.auth.provided.NoneAuthTokenManagerFactory

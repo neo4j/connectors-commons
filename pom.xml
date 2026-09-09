@@ -153,6 +153,11 @@
             </dependency>
             <dependency>
                 <groupId>org.neo4j.connectors</groupId>
+                <artifactId>commons-driver-auth-provided</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.neo4j.connectors</groupId>
                 <artifactId>commons-driver-auth-spi</artifactId>
                 <version>${project.version}</version>
             </dependency>

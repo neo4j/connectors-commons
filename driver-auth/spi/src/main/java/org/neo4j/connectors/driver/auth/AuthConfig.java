@@ -38,9 +38,7 @@ public interface AuthConfig {
      * @return a new configuration holding a copy of {@code parameters}
      */
     static AuthConfig of(String username, String password, Map<String, String> parameters) {
-        Map<String, String> copy = parameters == null
-                ? Collections.emptyMap()
-                : Map.copyOf(parameters);
+        Map<String, String> copy = parameters == null ? Collections.emptyMap() : Map.copyOf(parameters);
         return new DefaultAuthConfig(username, password, copy);
     }
 

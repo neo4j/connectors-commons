@@ -14,5 +14,6 @@
     <description>Pluggable Neo4j Java Driver authentication token managers for connectors</description>
     <modules>
         <module>spi</module>
+        <module>provided</module>
     </modules>
 </project>
