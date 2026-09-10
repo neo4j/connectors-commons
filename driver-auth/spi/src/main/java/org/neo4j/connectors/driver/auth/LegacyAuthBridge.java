@@ -36,7 +36,7 @@ import org.neo4j.driver.AuthTokenManagers;
  * <p>The bridge lazily goes through {@link AuthTokenManagers#bearerAsync}, deriving the expiry from
  * each token as it arrives.
  *
- * <p>The accepted trade-off is that {@co   de bearerAsync} also treats
+ * <p>The accepted trade-off is that {@code bearerAsync} also treats
  * {@link org.neo4j.driver.exceptions.TokenExpiredException} as retryable, not just
  * {@link org.neo4j.driver.exceptions.AuthenticationException}. For a static basic token that turns a
  * hard failure into a retry that then fails.
