@@ -15,7 +15,7 @@ be reused across different connectors.
 | `commons-reauth-driver`        | Java 8   | Wrapper driver that rebuilds the `Driver` on token expiry, for the Neo4j Java Driver **4.4**.            |
 
 The `commons-authn-*` modules are bound to no driver version. The two driver-bound modules target different driver
-majors, which can never share a classpath — they use the same packages under the same coordinates. Driver 5.x is not
+majors, which can never share a classpath. They use the same packages under the same coordinates. Driver 5.x is not
 targeted explicitly, as main target connects don't have a version using 5.x . However, `commons-driver-auth-*` modules 
 should be compatible with 5.x in theory. 
 
@@ -43,4 +43,4 @@ key, at the point the manager is created.
 
 Use `commons-reauth-driver` **only** on driver 4.4 with a Java 8 baseline. It exists because 4.4 cannot re-authenticate
 an open connection, so the whole `Driver` has to be rebuilt when a token expires. Driver 6.x does this natively, which
-makes the module redundant there — reach for `commons-driver-auth-spi` instead.
+makes the module redundant there. Reach for `commons-driver-auth-spi` instead.

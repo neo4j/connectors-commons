@@ -33,11 +33,10 @@ import org.neo4j.driver.AuthTokenManagers;
  * Bridges the legacy {@link AuthenticationTokenSupplierFactory} SPI onto driver-native
  * {@link AuthTokenManager} instances.
  *
- * <p>The bridge always goes through {@link AuthTokenManagers#bearerAsync}, deriving the expiry from
- * each token as it arrives. That is lazy — the supplier is never probed just to decide which manager
- * to build — null-safe, and correct for suppliers that are only sometimes expiring.
+ * <p>The bridge lazily goes through {@link AuthTokenManagers#bearerAsync}, deriving the expiry from
+ * each token as it arrives.
  *
- * <p>The accepted trade-off is that {@code bearerAsync} also treats
+ * <p>The accepted trade-off is that {@co   de bearerAsync} also treats
  * {@link org.neo4j.driver.exceptions.TokenExpiredException} as retryable, not just
  * {@link org.neo4j.driver.exceptions.AuthenticationException}. For a static basic token that turns a
  * hard failure into a retry that then fails.

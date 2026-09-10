@@ -27,7 +27,7 @@ import org.neo4j.connectors.driver.auth.AuthTokenManagerRegistry;
 
 /**
  * The registry-level view of this module. {@code commons-authn-provided} is on the test classpath,
- * so every name here is also claimed by a legacy supplier factory — these tests pin down that the
+ * so every name here is also claimed by a legacy supplier factory. These tests pin down that the
  * native factory is the one that wins.
  */
 class ProvidedAuthTokenManagerFactoriesTest {
