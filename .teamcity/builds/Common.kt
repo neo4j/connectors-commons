@@ -22,7 +22,6 @@ const val FULL_GITHUB_REPOSITORY = "$GITHUB_OWNER/$GITHUB_REPOSITORY"
 const val GITHUB_URL = "https://github.com/$FULL_GITHUB_REPOSITORY"
 
 enum class JavaVersion(val version: String, val dockerImage: String) {
-  V_11(version = "11", dockerImage = "%ecr-registry-connectors%:jdk-11-latest"),
   V_17(version = "17", dockerImage = "%ecr-registry-connectors%:jdk-17-latest"),
   V_21(version = "21", dockerImage = "%ecr-registry-connectors%:jdk-21-latest"),
 }
@@ -84,7 +83,7 @@ fun collectArtifacts(buildType: BuildType): BuildType {
 }
 
 fun BuildSteps.runMaven(
-    javaVersion: JavaVersion = JavaVersion.V_11,
+    javaVersion: JavaVersion = JavaVersion.V_17,
     init: MavenBuildStep.() -> Unit
 ): MavenBuildStep {
   val maven =

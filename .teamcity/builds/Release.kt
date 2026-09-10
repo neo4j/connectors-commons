@@ -92,7 +92,7 @@ class Release(id: String, name: String) :
                       .trimIndent()
 
               dockerImagePlatform = ScriptBuildStep.ImagePlatform.Linux
-              dockerImage = JavaVersion.V_11.dockerImage
+              dockerImage = JavaVersion.V_17.dockerImage
               dockerRunParameters =
                   "--volume /var/run/docker.sock:/var/run/docker.sock --volume %teamcity.build.checkoutDir%/signingkeysandbox:/root/.gnupg"
             }
