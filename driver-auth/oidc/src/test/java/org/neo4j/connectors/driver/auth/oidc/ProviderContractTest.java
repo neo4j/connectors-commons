@@ -38,9 +38,9 @@ import org.neo4j.driver.AuthTokenManager;
  * The provider matrix, asserted rather than documented: one test per provider pinning the exact form
  * body and headers its configuration puts on the wire.
  *
- * <p>The module has no provider-specific code, so this is the only place that records what a working
- * Keycloak, Okta, Entra, Cognito or Google configuration actually looks like — and the only thing
- * that will notice if a refactoring silently changes it.
+ * <p>The module has no provider-specific code, so this is the only place that records what a
+ * working Keycloak, Okta, Entra ID, Cognito or Google configuration looks like, and the only thing
+ * that notices if a change alters what goes on the wire.
  */
 class ProviderContractTest {
 

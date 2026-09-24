@@ -40,12 +40,12 @@ import java.util.function.Supplier;
 /**
  * Assembles the claims of a signed assertion and signs it with nimbus-jose-jwt.
  *
- * <p>Signing is the library's job — in particular the ECDSA transcoding RFC 7518 requires, which is
- * the easiest thing in this module to get subtly wrong. The <em>claims</em> stay ours, because that
- * is what makes one factory serve every provider: the RFC 7523 defaults ({@code iss}, {@code sub},
- * {@code aud}, {@code exp}, {@code iat}, {@code jti}) are what Okta and Entra want for
- * {@code private_key_jwt}, and anything a provider wants differently — Google's {@code scope} or
- * {@code target_audience} — is an {@code assertion.claim.<name>} setting rather than a code path.
+ * <p>Signing is left to nimbus-jose-jwt, including the fixed-width ECDSA encoding RFC 7518
+ * requires. The claims are assembled here, because that is what lets one factory serve every
+ * provider: the RFC 7523 defaults ({@code iss}, {@code sub}, {@code aud}, {@code exp}, {@code iat},
+ * {@code jti}) are what Okta and Entra ID expect for {@code private_key_jwt}, and anything a
+ * provider wants differently, such as Google's {@code scope} or {@code target_audience}, is an
+ * {@code assertion.claim.<name>} setting rather than a code path.
  *
  * <p>Internal to this module; not API.
  */

@@ -36,6 +36,7 @@ class AuthContextTest {
         assertThat(context.executor()).isSameAs(ForkJoinPool.commonPool());
         assertThat(context.clock()).isEqualTo(Clock.systemUTC());
         assertThat(context.sslContext()).isSameAs(defaultSslContext());
+        assertThat(context.classLoader()).isSameAs(Thread.currentThread().getContextClassLoader());
     }
 
     @Test
@@ -65,10 +66,19 @@ class AuthContextTest {
     }
 
     @Test
+    void carriesAnOverriddenClassLoader() {
+        ClassLoader loader = new ClassLoader(null) {};
+
+        assertThat(AuthContext.builder().classLoader(loader).build().classLoader())
+                .isSameAs(loader);
+    }
+
+    @Test
     void rejectsNullCollaborators() {
         assertThatThrownBy(() -> AuthContext.builder().executor(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> AuthContext.builder().clock(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> AuthContext.builder().sslContext(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> AuthContext.builder().classLoader(null)).isInstanceOf(NullPointerException.class);
     }
 
     private static SSLContext defaultSslContext() {

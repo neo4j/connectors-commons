@@ -43,9 +43,9 @@ import org.neo4j.connectors.driver.auth.oidc.TokenRequestException;
  * costs a dozen lines and keeps every token fetch off whichever thread asked for it.
  *
  * <p>The success body is read here rather than by {@code TokenResponse.parse}, which insists on
- * {@code token_type} — a field Google's {@code jwt_bearer} flow does not return at all, since its
- * reply carries only {@code id_token}. Reading the configured {@code tokenField} out of the JSON
- * object keeps that provider working.
+ * {@code token_type}. Google's {@code jwt_bearer} flow does not return that field at all, because
+ * its reply carries only {@code id_token}. Reading the configured {@code tokenField} out of the
+ * JSON object keeps that provider working.
  *
  * <p>Internal to this module; not API.
  */
@@ -56,9 +56,9 @@ public final class TokenEndpointClient {
     private static final Set<String> RESTRICTED = Set.of("connection", "content-length", "expect", "host", "upgrade");
 
     /**
-     * The shortest lifetime we will report. A provider whose tokens live for less than the configured
-     * refresh skew would otherwise yield an already-expired token, and the driver would re-request
-     * one on every single call.
+     * The shortest lifetime this client reports. A provider whose tokens live for less than the
+     * configured refresh skew would otherwise yield an already expired token, and the driver would
+     * request a new one on every call.
      */
     private static final Duration MINIMUM_LIFETIME = Duration.ofSeconds(1);
 
@@ -164,8 +164,9 @@ public final class TokenEndpointClient {
      * Derives when the token must be replaced: {@code expires_in}, then the JWT {@code exp} claim,
      * then the configured default, each minus the refresh skew.
      *
-     * <p>The {@code exp} claim is the fallback and not the primary source because an opaque token —
-     * which is what Okta returns without a custom authorisation server — has no claims to read.
+     * <p>The {@code exp} claim is the fallback rather than the primary source because an opaque
+     * token has no claims to read, and that is what Okta returns without a custom authorisation
+     * server.
      */
     private Instant expiryOf(String token, Object expiresIn) {
         Instant now = clock.instant();

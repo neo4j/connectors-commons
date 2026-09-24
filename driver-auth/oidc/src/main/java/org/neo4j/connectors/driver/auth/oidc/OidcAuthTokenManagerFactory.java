@@ -55,7 +55,7 @@ public class OidcAuthTokenManagerFactory implements AuthTokenManagerFactory {
 
     @Override
     public AuthTokenManager create(AuthConfig config, AuthContext context) {
-        OidcConfig parsed = OidcConfig.parse(config);
+        OidcConfig parsed = OidcConfig.parse(config, context);
         TokenSource source = TokenSources.build(parsed, context);
         return AuthTokenManagers.bearerAsync(() -> source.fetch().thenApply(token -> AuthTokens.bearer(token.value())
                 .expiringAt(token.expiresAt().toEpochMilli())));

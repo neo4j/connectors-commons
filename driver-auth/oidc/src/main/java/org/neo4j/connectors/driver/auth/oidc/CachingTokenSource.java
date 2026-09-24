@@ -25,9 +25,10 @@ import org.neo4j.connectors.driver.auth.oidc.internal.TokenErrors;
 /**
  * Holds a token until its refresh window opens, and lets only one fetch run at a time.
  *
- * <p>The driver already avoids asking for a token it believes is still valid, but it is not the only
- * caller — a connector that builds several drivers, or that calls
- * {@link org.neo4j.driver.AuthTokenManager#getToken()} directly, is. Two properties matter here:
+ * <p>The driver already avoids asking for a token it believes is still valid, but it is not the
+ * only caller. A connector that builds several drivers, or that calls
+ * {@link org.neo4j.driver.AuthTokenManager#getToken()} directly, is one too. Two properties matter
+ * here:
  *
  * <ul>
  *   <li>a valid token is returned without any I/O, rather than re-fetched on every call;

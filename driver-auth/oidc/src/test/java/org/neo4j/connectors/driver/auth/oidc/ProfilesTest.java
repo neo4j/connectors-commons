@@ -20,24 +20,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.oidc.clientauth.ClientAuthMethod;
 import org.neo4j.connectors.driver.auth.oidc.grant.GrantType;
 
 class ProfilesTest {
+    private static final ClassLoader LOADER = ProfilesTest.class.getClassLoader();
 
     @Test
     void changesNothingWhenNoProfileIsNamed() {
         Map<String, String> settings = Map.of("clientId", "c");
 
-        assertThat(Profiles.merge(settings)).isSameAs(settings);
+        assertThat(Profiles.merge(settings, LOADER)).isSameAs(settings);
     }
 
     @Test
     void mergesTheBundleUnderneathTheUsersSettings() {
-        Map<String, String> merged = Profiles.merge(Map.of("profile", "google", "tokenField", "access_token"));
+        Map<String, String> merged = Profiles.merge(Map.of("profile", "google", "tokenField", "access_token"), LOADER);
 
         assertThat(merged)
                 .contains(entry("grantType", "jwt_bearer"), entry("clientAuthMethod", "none"))
@@ -71,8 +76,39 @@ class ProfilesTest {
     }
 
     @Test
+    void readsTheBundleWithTheClassLoaderTheHostChose() {
+        ClassLoader loader =
+                loaderServing("profiles/in-house.properties", "grantType=client_credentials\nscope=neo4j.read\n");
+
+        Map<String, String> merged = Profiles.merge(Map.of("profile", "in-house"), loader);
+
+        assertThat(merged).contains(entry("grantType", "client_credentials"), entry("scope", "neo4j.read"));
+    }
+
+    @Test
+    void takesTheClassLoaderFromTheContext() {
+        ClassLoader loader = loaderServing("profiles/in-house.properties", "scope=neo4j.read\n");
+        AuthContext context = AuthContext.builder().classLoader(loader).build();
+        Map<String, String> settings = Map.of(
+                "profile", "in-house", "tokenEndpoint", "https://host/token", "clientId", "c", "clientSecret", "s");
+
+        OidcConfig config = OidcConfig.parse(AuthConfig.of(null, null, settings), context);
+
+        assertThat(config.scope()).contains("neo4j.read");
+    }
+
+    @Test
+    void doesNotSeeABundleTheHostsClassLoaderCannotReach() {
+        ClassLoader empty = new ClassLoader(null) {};
+
+        assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "google"), empty))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("profiles/google.properties");
+    }
+
+    @Test
     void reportsAProfileThatIsNotOnTheClasspath() {
-        assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "nonesuch")))
+        assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "nonesuch"), LOADER))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("profile")
                 .hasMessageContaining("profiles/nonesuch.properties");
@@ -80,8 +116,20 @@ class ProfilesTest {
 
     @Test
     void refusesToTraverseOutOfTheProfileDirectory() {
-        assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "../../etc/passwd")))
+        assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "../../etc/passwd"), LOADER))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("profile");
+    }
+
+    /** A loader that serves one resource and delegates nothing, standing in for a plugin loader. */
+    private static ClassLoader loaderServing(String resource, String contents) {
+        return new ClassLoader(null) {
+            @Override
+            public InputStream getResourceAsStream(String name) {
+                return resource.equals(name)
+                        ? new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8))
+                        : null;
+            }
+        };
     }
 }

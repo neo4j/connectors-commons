@@ -22,10 +22,10 @@ import java.util.Date;
 import java.util.Optional;
 
 /**
- * Reading — never validating — a JWT we were handed.
+ * Reads a JWT without validating it.
  *
- * <p>Signature checking is the server's job: we mint tokens, Neo4j decides whether to trust them.
- * The only claim of interest here is {@code exp}, and only as a fallback for a response that omitted
+ * <p>Checking the signature is the server's job: this module mints tokens and Neo4j decides whether
+ * to trust them. The only claim read here is {@code exp}, and only when the response omitted
  * {@code expires_in}.
  *
  * <p>Internal to this module; not API.
@@ -69,7 +69,7 @@ public final class Jwts {
             Date expiry = JWTParser.parse(token).getJWTClaimsSet().getExpirationTime();
             return Optional.ofNullable(expiry).map(Date::toInstant);
         } catch (Exception e) {
-            // A token we cannot read is not a failure: expiry falls through to the configured default.
+            // An unreadable token is not a failure here: expiry falls back to the configured default.
             return Optional.empty();
         }
     }

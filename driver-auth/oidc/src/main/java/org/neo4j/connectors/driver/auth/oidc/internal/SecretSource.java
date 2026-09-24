@@ -26,8 +26,8 @@ import java.util.function.Supplier;
  * Where a client secret comes from.
  *
  * <p>A file-backed secret is re-read on every fetch rather than cached, because the usual reason to
- * put a secret in a file is that something else rotates it — a Kubernetes secret mount, a Vault
- * agent. Reading it lazily is also what keeps {@code create()} free of I/O.
+ * put a secret in a file is that something else rotates it, such as a Kubernetes secret mount.
+ * Reading it lazily also keeps {@code create()} free of I/O.
  *
  * <p>Internal to this module; not API.
  */

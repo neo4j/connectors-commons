@@ -37,12 +37,12 @@ import org.neo4j.connectors.driver.auth.oidc.TokenRequestException;
  * Turns a refused token request into a {@link TokenRequestException} that says whether trying again
  * could help.
  *
- * <p>The RFC 6749 error body is read by the SDK's {@link TokenErrorResponse}; the classification is
- * ours, because it is a policy decision the specification does not make. It is deliberately narrow:
- * only a timeout, a {@code 408}, a {@code 429} and a {@code 5xx} are transient. An
- * {@code invalid_client} or {@code invalid_grant} means the credential is wrong and will stay wrong,
- * and reporting that as retryable would have the driver hammer the provider with a dead credential
- * until the rate limiter notices.
+ * <p>The RFC 6749 error body is read by the SDK's {@link TokenErrorResponse}. The classification on
+ * top of it belongs to this module, because the specification does not make that decision, and it
+ * is narrow on purpose: only a timeout, a {@code 408}, a {@code 429} and a {@code 5xx} are
+ * transient. An {@code invalid_client} or {@code invalid_grant} means the credential is wrong and
+ * will stay wrong, so retrying it only sends a dead credential to the provider until its rate
+ * limiter responds.
  *
  * <p>Internal to this module; not API.
  */
@@ -112,8 +112,8 @@ public final class TokenErrors {
     /**
      * Returns whether a failure is worth another attempt.
      *
-     * <p>Transport failures — a connection reset, a timeout — are; anything the provider decided is
-     * classified by {@link TokenRequestException#isRetryable()}.
+     * <p>Transport failures such as a connection reset or a timeout are. Anything the provider
+     * decided is classified by {@link TokenRequestException#isRetryable()}.
      *
      * @param error the failure, may be wrapped in a {@link CompletionException}
      * @return {@code true} if another attempt could succeed

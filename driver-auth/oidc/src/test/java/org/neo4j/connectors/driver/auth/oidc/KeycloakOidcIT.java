@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.neo4j.connectors.driver.auth.AuthConfig;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.AuthTokenManagerRegistry;
+import org.neo4j.connectors.driver.auth.oidc.grant.GrantType;
 import org.neo4j.driver.AuthToken;
 import org.neo4j.driver.AuthTokenManager;
 import org.neo4j.driver.Driver;
@@ -133,6 +134,43 @@ public class KeycloakOidcIT {
     }
 
     @Test
+    void takesItsDefaultsFromACustomProfileBundle() {
+        // profiles/keycloak-it.properties carries the grant, the client authentication method, the
+        // scope and the skew; only the values that differ per deployment are configured here.
+        Map<String, String> settings = new HashMap<>();
+        settings.put("profile", "keycloak-it");
+        settings.put("issuer", issuer());
+        settings.put("clientId", CLIENT_ID);
+        settings.put("clientSecret", CLIENT_SECRET);
+
+        AuthTokenManager manager = new OidcAuthTokenManagerFactory()
+                .create(AuthConfig.of("john-tester", "testerpwd", settings), AuthContext.defaults());
+
+        try (Driver driver = GraphDatabase.driver(NEO4J.getBoltUrl(), manager)) {
+            assertThat(write(driver)).isNotBlank();
+        }
+    }
+
+    @Test
+    void letsTheConfigurationOverrideTheBundle() {
+        Map<String, String> settings = new HashMap<>();
+        settings.put("profile", "keycloak-it");
+        settings.put("issuer", issuer());
+        settings.put("clientId", CLIENT_ID);
+        settings.put("clientSecret", CLIENT_SECRET);
+        settings.put("scope", "openid");
+        settings.put("maxRetries", "5");
+
+        OidcConfig config = OidcConfig.parse(AuthConfig.of("john-tester", "testerpwd", settings));
+
+        assertThat(config.scope()).contains("openid");
+        assertThat(config.maxRetries()).isEqualTo(5);
+        // Untouched by the configuration, so still the bundle's.
+        assertThat(config.grantType()).isEqualTo(GrantType.PASSWORD);
+        assertThat(config.refreshSkew()).isEqualTo(Duration.ZERO);
+    }
+
+    @Test
     void resolvesTheTokenEndpointThroughDiscovery() {
         AuthTokenManager manager = AuthTokenManagerRegistry.usingDefaultClassLoader()
                 .create("oidc", AuthConfig.of("john-tester", "testerpwd", settings()));
@@ -143,6 +181,13 @@ public class KeycloakOidcIT {
     private static AuthTokenManager manager() {
         return new OidcAuthTokenManagerFactory()
                 .create(AuthConfig.of("john-tester", "testerpwd", settings()), AuthContext.defaults());
+    }
+
+    private static String issuer() {
+        // Reached over plain HTTP on the mapped port: the container's certificate is issued for the
+        // name 'keycloak', which only resolves inside the docker network. The token Keycloak mints
+        // still carries the https://keycloak:8443 issuer the Neo4j container is configured to trust.
+        return "http://" + KEYCLOAK.getHost() + ":" + KEYCLOAK.getHttpPort() + "/realms/" + REALM;
     }
 
     private static Map<String, String> settings() {

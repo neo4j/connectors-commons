@@ -31,8 +31,8 @@ import org.neo4j.connectors.driver.auth.oidc.internal.TokenErrors;
  * {@code invalid_grant} is a configuration mistake, and retrying it would turn one bad credential
  * into a burst against a provider that rate-limits its token endpoint.
  *
- * <p>When the provider sends {@code Retry-After} that wins over the backoff schedule — on a
- * {@code 429} the schedule is exactly what the provider is asking us to stop doing.
+ * <p>A {@code Retry-After} header wins over the backoff schedule. On a {@code 429} that schedule is
+ * exactly what the provider is asking the client to stop doing.
  *
  * <p>Waiting is done with a delayed executor rather than a sleep, so no thread is parked.
  */

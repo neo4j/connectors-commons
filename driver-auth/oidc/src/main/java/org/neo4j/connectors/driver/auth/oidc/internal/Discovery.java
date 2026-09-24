@@ -33,9 +33,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * Fetches {@code .well-known/openid-configuration} once, and remembers the answer.
  *
  * <p>Parsed as RFC 8414 authorization server metadata rather than as OpenID Connect provider
- * metadata: we only need {@code token_endpoint}, and {@code OIDCProviderMetadata} additionally
- * insists on {@code subject_types_supported} and other fields, which would reject documents this module
- * has no reason to care about.
+ * metadata. Only {@code token_endpoint} is needed here, and {@code OIDCProviderMetadata}
+ * additionally requires {@code subject_types_supported} and other fields, rejecting documents this
+ * module could otherwise use.
  *
  * <p>The fetch is deferred to the first token request so that creating a token manager performs no
  * I/O. Concurrent callers share one in-flight request: the function handed to
@@ -128,8 +128,8 @@ public final class Discovery {
                     discoveryUrl,
                     response.statusCode(),
                     // Real elapsed time, not the host's clock: an HTTP-date says when the provider
-                    // will be ready, and honouring it is about wall clock rather than about our own
-                    // expiry arithmetic.
+                    // will be ready, so the wait is measured against the wall clock rather than
+                    // against the clock used for token expiry.
                     TokenErrors.retryAfter(response.headers(), Clock.systemUTC())
                             .orElse(null));
         }

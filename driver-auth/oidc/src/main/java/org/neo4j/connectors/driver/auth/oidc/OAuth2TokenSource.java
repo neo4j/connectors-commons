@@ -33,10 +33,10 @@ import org.neo4j.connectors.driver.auth.oidc.internal.TokenEndpointClient;
 /**
  * The engine: resolve the token URL, assemble the request, send it, read the reply.
  *
- * <p>Assembling is the SDK's job — which grant, which client authentication, how they serialise. The
- * only thing this class adds is the settings-driven shaping the SDK has no opinion about:
- * {@code scope}, {@code audience}, {@code resource} and the {@code extraParam.*} escape hatch, with
- * the escape hatch applied last so it can override any of them.
+ * <p>The SDK decides which grant and which client authentication to send, and how to serialise
+ * them. This class adds only the settings the SDK has no opinion about: {@code scope},
+ * {@code audience}, {@code resource} and {@code extraParam.*}. The extra parameters are applied
+ * last so that they override any of the others.
  *
  * <p>Assembly can block: it may read a rotating token file, a secret file, or sign an assertion.
  * That work is therefore dispatched to the host's executor rather than left on whichever thread

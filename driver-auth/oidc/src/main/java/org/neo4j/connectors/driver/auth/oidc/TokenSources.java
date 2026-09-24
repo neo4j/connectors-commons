@@ -177,7 +177,7 @@ public final class TokenSources {
     }
 
     /**
-     * Returns the assertion minter, or {@code null} when no signing key is configured — which is
+     * Returns the assertion factory, or {@code null} when no signing key is configured. That covers
      * every configuration that neither signs its client authentication nor uses the
      * {@code jwt_bearer} grant.
      */

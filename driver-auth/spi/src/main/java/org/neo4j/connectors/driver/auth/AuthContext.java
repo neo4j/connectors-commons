@@ -66,7 +66,7 @@ public interface AuthContext {
      *
      * <p>Defaults to {@link Clock#systemUTC()}, matching the clock the driver hardcodes in its own
      * expiration-based manager. Note that the driver offers no seam to inject a clock, so overriding
-     * this only affects our own expiry calculations, not the driver's.
+     * this only affects a factory's own expiry calculations, not the driver's.
      *
      * @return the clock, never {@code null}
      */
@@ -94,12 +94,28 @@ public interface AuthContext {
     }
 
     /**
+     * Returns the class loader to read classpath resources with.
+     *
+     * <p>Defaults to the thread context class loader, matching how
+     * {@link AuthTokenManagerRegistry#usingDefaultClassLoader()} discovers services. Hosts that
+     * isolate plugins in their own class loader should override it, so that a factory finds the
+     * resources shipped alongside the plugin rather than whatever the calling thread happens to see.
+     *
+     * @return the class loader, never {@code null}
+     */
+    default ClassLoader classLoader() {
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        return contextClassLoader != null ? contextClassLoader : AuthContext.class.getClassLoader();
+    }
+
+    /**
      * Builds an {@link AuthContext}, starting from the defaults.
      */
     final class Builder {
         private Executor executor = ForkJoinPool.commonPool();
         private Clock clock = Clock.systemUTC();
         private SSLContext sslContext;
+        private ClassLoader classLoader;
 
         private Builder() {}
 
@@ -137,12 +153,23 @@ public interface AuthContext {
         }
 
         /**
+         * Sets the class loader to read classpath resources with.
+         *
+         * @param classLoader the class loader, must not be {@code null}
+         * @return this builder
+         */
+        public Builder classLoader(ClassLoader classLoader) {
+            this.classLoader = Objects.requireNonNull(classLoader, "classLoader must not be null");
+            return this;
+        }
+
+        /**
          * Builds the context.
          *
          * @return a new context
          */
         public AuthContext build() {
-            return new DefaultAuthContext(executor, clock, sslContext);
+            return new DefaultAuthContext(executor, clock, sslContext, classLoader);
         }
     }
 }

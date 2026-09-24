@@ -21,13 +21,20 @@ import java.util.concurrent.Executor;
 import javax.net.ssl.SSLContext;
 
 /**
- * A {@code null} {@code sslContext} means "not overridden": the interface default is resolved on
- * every read, which keeps {@link javax.net.ssl.SSLContext#getDefault()} out of the builder, where it
- * would run even for the hosts that never make an HTTPS call.
+ * A {@code null} component means "not overridden": the interface default is resolved on every read.
+ * That keeps {@link javax.net.ssl.SSLContext#getDefault()} out of the builder, where it would run
+ * even for hosts that never make an HTTPS call, and lets the class loader follow the calling thread
+ * rather than the thread that happened to build the context.
  */
-record DefaultAuthContext(Executor executor, Clock clock, SSLContext sslContext) implements AuthContext {
+record DefaultAuthContext(Executor executor, Clock clock, SSLContext sslContext, ClassLoader classLoader)
+        implements AuthContext {
     @Override
     public SSLContext sslContext() {
         return sslContext == null ? AuthContext.super.sslContext() : sslContext;
+    }
+
+    @Override
+    public ClassLoader classLoader() {
+        return classLoader == null ? AuthContext.super.classLoader() : classLoader;
     }
 }

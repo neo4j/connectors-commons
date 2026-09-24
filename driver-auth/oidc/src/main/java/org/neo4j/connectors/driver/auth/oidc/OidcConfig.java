@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.oidc.clientauth.ClientAuthMethod;
 import org.neo4j.connectors.driver.auth.oidc.grant.GrantType;
 import org.neo4j.connectors.driver.auth.oidc.internal.AssertionFactory;
@@ -33,9 +34,9 @@ import org.neo4j.connectors.driver.auth.oidc.internal.AssertionFactory;
  * grant, how the client proves itself, which extra form fields, which assertion claims. That is what
  * lets Keycloak, Okta, Entra ID, Google and Cognito share one factory.
  *
- * <p>Parsing is total and eager, so a typo is an {@link IllegalArgumentException} naming the key at
- * the moment the connector starts. Nothing here touches the network or reads a credential file —
- * both are deferred to the first token fetch.
+ * <p>Parsing is eager, so a typo is an {@link IllegalArgumentException} naming the key at the
+ * moment the connector starts. Nothing here touches the network or reads a credential file. Both
+ * are deferred to the first token fetch.
  */
 public final class OidcConfig {
     static final String ISSUER = "issuer";
@@ -173,7 +174,22 @@ public final class OidcConfig {
     }
 
     /**
-     * Parses and validates the settings of one {@code oidc} configuration.
+     * Parses and validates the settings of one {@code oidc} configuration, reading any profile
+     * bundle with the host's class loader.
+     *
+     * @param config the user-supplied connector configuration
+     * @param context the runtime collaborators provided by the host
+     * @return the parsed settings
+     * @throws IllegalArgumentException naming the offending key, if anything is missing, malformed or
+     *     contradictory
+     */
+    public static OidcConfig parse(AuthConfig config, AuthContext context) {
+        return new OidcConfig(config, new Settings(Profiles.merge(config.asMap(), context.classLoader())));
+    }
+
+    /**
+     * Parses and validates the settings of one {@code oidc} configuration, reading any profile
+     * bundle with the default class loader.
      *
      * @param config the user-supplied connector configuration
      * @return the parsed settings
@@ -181,7 +197,7 @@ public final class OidcConfig {
      *     contradictory
      */
     public static OidcConfig parse(AuthConfig config) {
-        return new OidcConfig(config, new Settings(Profiles.merge(config.asMap())));
+        return parse(config, AuthContext.defaults());
     }
 
     private void validateCombinations() {
