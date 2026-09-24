@@ -111,6 +111,12 @@ merged *underneath* yours. It carries no logic and builds no URLs, every value i
 and omitting the setting changes nothing. Adding your own is a matter of dropping a file onto the
 classpath.
 
+The bundle is read with `AuthContext.classLoader()`, which `AuthTokenManagerRegistry.using(loader)`
+sets for you, so a host that isolates plugins gets the bundle shipped with the plugin. Two bundles
+of the same name on one classpath is an error naming both, rather than a silent pick: which copy a
+class loader returns depends on search order and on whether delegation is parent first, and neither
+is predictable in a connector runtime.
+
 ### Worked configurations
 
 Each block lists the connector-side parameters and the matching `dbms.security.oidc.<name>.*`

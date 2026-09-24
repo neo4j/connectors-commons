@@ -19,9 +19,15 @@ package org.neo4j.connectors.driver.auth.oidc;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -60,17 +66,42 @@ final class Profiles {
         return merged;
     }
 
+    /** Distinct by URL, so the same jar listed twice on the classpath is not read as a clash. */
+    private static List<URL> locate(String resource, ClassLoader loader) {
+        try {
+            Set<String> seen = new LinkedHashSet<>();
+            List<URL> found = new ArrayList<>();
+            for (URL url : Collections.list(loader.getResources(resource))) {
+                if (seen.add(url.toString())) {
+                    found.add(url);
+                }
+            }
+            return found;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not scan the classpath for '" + resource + "'", e);
+        }
+    }
+
     private static Map<String, String> load(String name, ClassLoader loader) {
         if (!VALID_NAME.matcher(name).matches()) {
             throw Settings.invalid(PROFILE, name, "a name made of letters, digits, '.', '_' and '-'");
         }
         String resource = "profiles/" + name + ".properties";
+        List<URL> found = locate(resource, loader);
+        if (found.isEmpty()) {
+            throw new IllegalArgumentException("Authentication parameter '" + PROFILE + "' names '" + name
+                    + "', but no '" + resource + "' was found on the classpath");
+        }
+        if (found.size() > 1) {
+            // Which copy a class loader hands back depends on search order and on whether delegation
+            // is parent first, neither of which the user controls in a connector runtime. Sourcing
+            // tokens from whichever endpoint happened to win is worse than refusing to start.
+            throw new IllegalArgumentException("Authentication parameter '" + PROFILE + "' names '" + name
+                    + "', but the classpath holds " + found.size() + " bundles called '" + resource + "': " + found
+                    + ". Only one of them would be used, and which one is not predictable, so rename all but one.");
+        }
         Properties properties = new Properties();
-        try (InputStream stream = loader.getResourceAsStream(resource)) {
-            if (stream == null) {
-                throw new IllegalArgumentException("Authentication parameter '" + PROFILE + "' names '" + name
-                        + "', but no '" + resource + "' was found on the classpath");
-            }
+        try (InputStream stream = found.get(0).openStream()) {
             properties.load(stream);
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read the profile bundle '" + resource + "'", e);
