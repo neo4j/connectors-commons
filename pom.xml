@@ -285,7 +285,9 @@
                             <include>src/main/java/**/*.java</include>
                             <include>src/test/java/**/*.java</include>
                         </includes>
-                        <palantirJavaFormat/>
+                        <palantirJavaFormat>
+                            <version>2.28.0</version>
+                        </palantirJavaFormat>
                     </java>
                 </configuration>
                 <executions>
