@@ -18,5 +18,16 @@ package org.neo4j.connectors.driver.auth;
 
 import java.time.Clock;
 import java.util.concurrent.Executor;
+import javax.net.ssl.SSLContext;
 
-record DefaultAuthContext(Executor executor, Clock clock) implements AuthContext {}
+/**
+ * A {@code null} {@code sslContext} means "not overridden": the interface default is resolved on
+ * every read, which keeps {@link javax.net.ssl.SSLContext#getDefault()} out of the builder, where it
+ * would run even for the hosts that never make an HTTPS call.
+ */
+record DefaultAuthContext(Executor executor, Clock clock, SSLContext sslContext) implements AuthContext {
+    @Override
+    public SSLContext sslContext() {
+        return sslContext == null ? AuthContext.super.sslContext() : sslContext;
+    }
+}

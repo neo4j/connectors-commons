@@ -16,10 +16,12 @@
  */
 package org.neo4j.connectors.driver.auth;
 
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
+import javax.net.ssl.SSLContext;
 
 /**
  * Runtime collaborators injected by the host into an {@link AuthTokenManagerFactory}.
@@ -73,11 +75,31 @@ public interface AuthContext {
     }
 
     /**
+     * Returns the SSL context to use for outbound calls to an identity provider.
+     *
+     * <p>Defaults to {@link SSLContext#getDefault()}, so a factory that makes no HTTPS call of its
+     * own can ignore it. Hosts that talk to a self-hosted provider behind a private certificate
+     * authority should override it. This context has nothing to do with the driver's own Bolt
+     * encryption, which is configured on the driver instead.
+     *
+     * @return the SSL context, never {@code null}
+     * @throws IllegalStateException if the platform has no default SSL context
+     */
+    default SSLContext sslContext() {
+        try {
+            return SSLContext.getDefault();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("The default SSL context is unavailable", e);
+        }
+    }
+
+    /**
      * Builds an {@link AuthContext}, starting from the defaults.
      */
     final class Builder {
         private Executor executor = ForkJoinPool.commonPool();
         private Clock clock = Clock.systemUTC();
+        private SSLContext sslContext;
 
         private Builder() {}
 
@@ -104,12 +126,23 @@ public interface AuthContext {
         }
 
         /**
+         * Sets the SSL context to use for outbound calls to an identity provider.
+         *
+         * @param sslContext the SSL context, must not be {@code null}
+         * @return this builder
+         */
+        public Builder sslContext(SSLContext sslContext) {
+            this.sslContext = Objects.requireNonNull(sslContext, "sslContext must not be null");
+            return this;
+        }
+
+        /**
          * Builds the context.
          *
          * @return a new context
          */
         public AuthContext build() {
-            return new DefaultAuthContext(executor, clock);
+            return new DefaultAuthContext(executor, clock, sslContext);
         }
     }
 }

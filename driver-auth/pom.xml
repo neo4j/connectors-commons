@@ -15,5 +15,6 @@
     <modules>
         <module>spi</module>
         <module>provided</module>
+        <module>oidc</module>
     </modules>
 </project>
