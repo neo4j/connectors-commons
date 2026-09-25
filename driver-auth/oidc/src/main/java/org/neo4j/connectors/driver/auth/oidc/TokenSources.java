@@ -123,14 +123,16 @@ public final class TokenSources {
     private static GrantFactory grants(OidcConfig config, Function<URI, SignedJWT> assertions) {
         return switch (config.grantType()) {
             case CLIENT_CREDENTIALS -> endpoint -> new ClientCredentialsGrant();
-            case PASSWORD -> endpoint -> new ResourceOwnerPasswordCredentialsGrant(
-                    config.username().orElseThrow(),
-                    new Secret(config.password().orElseThrow()));
+            case PASSWORD ->
+                endpoint -> new ResourceOwnerPasswordCredentialsGrant(
+                        config.username().orElseThrow(),
+                        new Secret(config.password().orElseThrow()));
             case REFRESH_TOKEN -> new RollingRefreshToken(config.refreshToken().orElseThrow());
             case JWT_BEARER -> endpoint -> new JWTBearerGrant(assertions.apply(endpoint));
-            case TOKEN_EXCHANGE -> endpoint -> new TokenExchangeGrant(
-                    new TypelessToken(read(config.subjectTokenFile().orElseThrow())),
-                    subjectTokenType(config.subjectTokenType()));
+            case TOKEN_EXCHANGE ->
+                endpoint -> new TokenExchangeGrant(
+                        new TypelessToken(read(config.subjectTokenFile().orElseThrow())),
+                        subjectTokenType(config.subjectTokenType()));
         };
     }
 
@@ -157,10 +159,12 @@ public final class TokenSources {
     private static Function<URI, ClientAuthentication> clientAuthentication(
             OidcConfig config, Function<URI, SignedJWT> assertions) {
         return switch (config.clientAuthMethod()) {
-            case CLIENT_SECRET_BASIC -> endpoint -> new ClientSecretBasic(
-                    clientId(config), new Secret(clientSecret(config).get()));
-            case CLIENT_SECRET_POST -> endpoint -> new ClientSecretPost(
-                    clientId(config), new Secret(clientSecret(config).get()));
+            case CLIENT_SECRET_BASIC ->
+                endpoint -> new ClientSecretBasic(
+                        clientId(config), new Secret(clientSecret(config).get()));
+            case CLIENT_SECRET_POST ->
+                endpoint -> new ClientSecretPost(
+                        clientId(config), new Secret(clientSecret(config).get()));
             case PRIVATE_KEY_JWT -> endpoint -> new PrivateKeyJWT(assertions.apply(endpoint));
             case NONE -> endpoint -> null;
         };
