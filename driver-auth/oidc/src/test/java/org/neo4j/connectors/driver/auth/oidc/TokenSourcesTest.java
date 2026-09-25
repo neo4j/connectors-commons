@@ -17,8 +17,10 @@
 package org.neo4j.connectors.driver.auth.oidc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,32 +39,40 @@ class TokenSourcesTest {
     Path directory;
 
     @Test
+    void buildsWithoutStartingAnHttpClient() {
+        long before = httpClientThreads();
+
+        TokenSource source = TokenSources.build(config(base()), AuthContext.defaults());
+
+        assertThat(source).isNotNull();
+        assertThat(httpClientThreads())
+                .as("building a token source must not start a selector thread; on Java 17 it could never be stopped")
+                .isEqualTo(before);
+    }
+
+    @Test
     void buildsWithoutTouchingTheNetworkOrTheFilesystem() {
         Map<String, String> settings = base();
         settings.put("issuer", "https://provider.invalid");
         settings.put("clientSecretFile", "/does/not/exist");
+        settings.put("trustStoreFile", "/does/not/exist/either.p12");
         settings.remove("clientSecret");
+        settings.remove("tokenEndpoint");
 
         assertThat(TokenSources.build(config(settings), AuthContext.defaults())).isNotNull();
     }
 
     @Test
-    void buildsAnSslContextFromAConfiguredTrustStore() {
-        Map<String, String> settings = base();
-        settings.put("trustStoreFile", onClasspath("keycloak.jks").toString());
-        settings.put("trustStorePassword", "testpwd");
-        settings.put("trustStoreType", "PKCS12");
-
-        assertThat(TokenSources.build(config(settings), AuthContext.defaults())).isNotNull();
-    }
-
-    @Test
-    void reportsATrustStoreThatIsNotThere() {
+    void readsTheTrustStoreOnTheFirstFetchRatherThanWhenBuilt() {
         Map<String, String> settings = base();
         settings.put("trustStoreFile", directory.resolve("absent.p12").toString());
+        settings.put("maxRetries", "0");
+        TokenSource source = TokenSources.build(config(settings), AuthContext.defaults());
 
-        assertThatThrownBy(() -> TokenSources.build(config(settings), AuthContext.defaults()))
-                .isInstanceOf(UncheckedIOException.class)
+        assertThatCode(() -> TokenSources.build(config(settings), AuthContext.defaults()))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> source.fetch().toCompletableFuture().join())
+                .hasCauseInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("absent.p12");
     }
 
@@ -71,10 +81,26 @@ class TokenSourcesTest {
         Path store = Files.writeString(directory.resolve("broken.p12"), "not a key store");
         Map<String, String> settings = base();
         settings.put("trustStoreFile", store.toString());
+        settings.put("maxRetries", "0");
+        TokenSource source = TokenSources.build(config(settings), AuthContext.defaults());
 
-        assertThatThrownBy(() -> TokenSources.build(config(settings), AuthContext.defaults()))
-                .isInstanceOfAny(UncheckedIOException.class, IllegalArgumentException.class)
-                .hasMessageContaining("broken.p12");
+        assertThatThrownBy(() -> source.fetch().toCompletableFuture().join()).hasMessageContaining("broken.p12");
+    }
+
+    @Test
+    void usesAConfiguredTrustStore() {
+        Map<String, String> settings = base();
+        settings.put("trustStoreFile", onClasspath("keycloak.jks").toString());
+        settings.put("trustStorePassword", "testpwd");
+        settings.put("trustStoreType", "PKCS12");
+        settings.put("tokenEndpoint", "https://127.0.0.1:1/token");
+        settings.put("maxRetries", "0");
+        TokenSource source = TokenSources.build(config(settings), AuthContext.defaults());
+
+        // The client is built, so the failure is the unreachable endpoint rather than the store.
+        assertThatThrownBy(() -> source.fetch().toCompletableFuture().join())
+                .hasRootCauseInstanceOf(IOException.class)
+                .hasMessageNotContaining("trust store");
     }
 
     @Test
@@ -93,6 +119,12 @@ class TokenSourcesTest {
         settings.put("proxyPort", "3128");
 
         assertThat(TokenSources.build(config(settings), AuthContext.defaults())).isNotNull();
+    }
+
+    private static long httpClientThreads() {
+        return Thread.getAllStackTraces().keySet().stream()
+                .filter(thread -> thread.getName().contains("HttpClient"))
+                .count();
     }
 
     private static Map<String, String> base() {

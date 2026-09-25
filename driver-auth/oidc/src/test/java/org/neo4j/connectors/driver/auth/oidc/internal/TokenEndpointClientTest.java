@@ -197,7 +197,7 @@ class TokenEndpointClientTest {
     }
 
     private TokenEndpointClient client(String tokenField, Duration skew, Duration defaultTtl) {
-        return new TokenEndpointClient(http, Duration.ofSeconds(5), tokenField, skew, defaultTtl, CLOCK);
+        return new TokenEndpointClient(() -> http, Duration.ofSeconds(5), tokenField, skew, defaultTtl, CLOCK);
     }
 
     private AccessToken fetch(TokenEndpointClient client) {

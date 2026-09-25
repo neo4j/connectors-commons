@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Supplier;
 import org.neo4j.connectors.driver.auth.oidc.AccessToken;
 import org.neo4j.connectors.driver.auth.oidc.TokenRequestException;
 
@@ -62,7 +63,7 @@ public final class TokenEndpointClient {
      */
     private static final Duration MINIMUM_LIFETIME = Duration.ofSeconds(1);
 
-    private final HttpClient http;
+    private final Supplier<HttpClient> http;
     private final Duration requestTimeout;
     private final String tokenField;
     private final Duration refreshSkew;
@@ -72,7 +73,7 @@ public final class TokenEndpointClient {
     /**
      * Creates the client.
      *
-     * @param http the client to send with
+     * @param http supplies the client to send with, built on first use
      * @param requestTimeout the per-request timeout
      * @param tokenField the response field holding the token, {@code access_token} or {@code id_token}
      * @param refreshSkew how early to treat the token as expired
@@ -80,7 +81,7 @@ public final class TokenEndpointClient {
      * @param clock the clock every expiry is computed against
      */
     public TokenEndpointClient(
-            HttpClient http,
+            Supplier<HttpClient> http,
             Duration requestTimeout,
             String tokenField,
             Duration refreshSkew,
@@ -103,7 +104,8 @@ public final class TokenEndpointClient {
     public CompletionStage<AccessToken> requestToken(TokenRequest request) {
         HTTPRequest sdkRequest = request.toHTTPRequest();
         URI endpoint = sdkRequest.getURI();
-        return http.sendAsync(toJdk(sdkRequest), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+        return http.get()
+                .sendAsync(toJdk(sdkRequest), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(response -> toAccessToken(endpoint, response));
     }
 

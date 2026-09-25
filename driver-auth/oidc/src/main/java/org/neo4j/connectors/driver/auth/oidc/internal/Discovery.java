@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Fetches {@code .well-known/openid-configuration} once, and remembers the answer.
@@ -48,7 +49,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Internal to this module; not API.
  */
 public final class Discovery {
-    private final HttpClient http;
+    private final Supplier<HttpClient> http;
     private final URI discoveryUrl;
     private final Duration requestTimeout;
     private final AtomicReference<CompletableFuture<AuthorizationServerMetadata>> metadata = new AtomicReference<>();
@@ -56,11 +57,11 @@ public final class Discovery {
     /**
      * Creates the lookup.
      *
-     * @param http the client to fetch with
+     * @param http supplies the client to fetch with, built on first use
      * @param discoveryUrl the discovery document URL
      * @param requestTimeout the per-request timeout
      */
-    public Discovery(HttpClient http, URI discoveryUrl, Duration requestTimeout) {
+    public Discovery(Supplier<HttpClient> http, URI discoveryUrl, Duration requestTimeout) {
         this.http = http;
         this.discoveryUrl = discoveryUrl;
         this.requestTimeout = requestTimeout;
@@ -118,7 +119,8 @@ public final class Discovery {
                 .header("Accept", "application/json")
                 .GET()
                 .build();
-        return http.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+        return http.get()
+                .sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(this::parse);
     }
 

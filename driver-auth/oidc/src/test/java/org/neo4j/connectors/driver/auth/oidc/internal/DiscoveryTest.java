@@ -136,7 +136,7 @@ class DiscoveryTest {
     }
 
     private Discovery discovery() {
-        return new Discovery(http, provider.uri(WELL_KNOWN), Duration.ofSeconds(5));
+        return new Discovery(() -> http, provider.uri(WELL_KNOWN), Duration.ofSeconds(5));
     }
 
     private static void await(CyclicBarrier barrier) {

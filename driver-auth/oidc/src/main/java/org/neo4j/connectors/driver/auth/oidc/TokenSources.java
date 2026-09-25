@@ -55,6 +55,7 @@ import javax.net.ssl.TrustManagerFactory;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.oidc.internal.AssertionFactory;
 import org.neo4j.connectors.driver.auth.oidc.internal.Discovery;
+import org.neo4j.connectors.driver.auth.oidc.internal.LazyHttpClient;
 import org.neo4j.connectors.driver.auth.oidc.internal.PrivateKeys;
 import org.neo4j.connectors.driver.auth.oidc.internal.SecretSource;
 import org.neo4j.connectors.driver.auth.oidc.internal.TokenEndpointClient;
@@ -90,7 +91,7 @@ public final class TokenSources {
      * @return a token source
      */
     public static TokenSource build(OidcConfig config, AuthContext context) {
-        HttpClient http = httpClient(config, context);
+        Supplier<HttpClient> http = new LazyHttpClient(() -> httpClient(config, context));
         Function<URI, SignedJWT> assertions = assertions(config, context);
 
         TokenSource source = new OAuth2TokenSource(
@@ -110,7 +111,7 @@ public final class TokenSources {
         return new CachingTokenSource(source, context.clock());
     }
 
-    private static Supplier<CompletionStage<URI>> tokenEndpoint(OidcConfig config, HttpClient http) {
+    private static Supplier<CompletionStage<URI>> tokenEndpoint(OidcConfig config, Supplier<HttpClient> http) {
         if (config.tokenEndpoint().isPresent()) {
             CompletionStage<URI> configured =
                     CompletableFuture.completedStage(config.tokenEndpoint().orElseThrow());
