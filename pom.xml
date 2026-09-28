@@ -49,7 +49,7 @@
         <license.id>neo4j_apache_v2</license.id>
         <logback.version>1.6.4</logback.version>
         <maven.compiler.release>17</maven.compiler.release>
-        <mockito.version>5.23.0</mockito.version>
+        <mockito.version>5.24.0</mockito.version>
         <neo4j-driver6.version>6.2.1</neo4j-driver6.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <slf4j.version>2.0.19</slf4j.version>
