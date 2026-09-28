@@ -62,7 +62,8 @@ final class Settings {
         return get(key).map(value -> {
             try {
                 URI uri = new URI(value);
-                if (!uri.isAbsolute()) {
+                var scheme = uri.getScheme();
+                if (!uri.isAbsolute() || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
                     throw invalid(key, value, "an absolute URL");
                 }
                 return uri;
