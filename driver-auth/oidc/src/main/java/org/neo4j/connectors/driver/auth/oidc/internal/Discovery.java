@@ -106,7 +106,7 @@ public final class Discovery {
     }
 
     private void start(CompletableFuture<AuthorizationServerMetadata> promise) {
-        fetch().whenComplete((fetched, error) -> {
+        attempt().whenComplete((fetched, error) -> {
             if (error != null) {
                 metadata.compareAndSet(promise, null);
                 promise.completeExceptionally(TokenErrors.unwrap(error));
@@ -116,7 +116,15 @@ public final class Discovery {
         });
     }
 
-    private CompletableFuture<AuthorizationServerMetadata> fetch() {
+    private CompletionStage<AuthorizationServerMetadata> attempt() {
+        try {
+            return fetch();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedStage(e);
+        }
+    }
+
+    private CompletionStage<AuthorizationServerMetadata> fetch() {
         HttpRequest request = HttpRequest.newBuilder(discoveryUrl)
                 .timeout(requestTimeout)
                 .header("Accept", "application/json")

@@ -27,6 +27,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -85,6 +86,38 @@ class TokenSourcesTest {
         TokenSource source = TokenSources.build(config(settings), AuthContext.defaults());
 
         assertThatThrownBy(() -> source.fetch().toCompletableFuture().join()).hasMessageContaining("broken.p12");
+    }
+
+    @Test
+    void failsEveryFetchRatherThanHangingWhenTheClientCannotBeBuiltOnTheDiscoveryPath() throws Exception {
+        Path store = directory.resolve("appears-later.p12");
+        Map<String, String> settings = base();
+        settings.remove("tokenEndpoint");
+        settings.put("issuer", "https://127.0.0.1:1/realms/neo4j");
+        settings.put("trustStoreFile", store.toString());
+        settings.put("trustStorePassword", "testpwd");
+        settings.put("maxRetries", "0");
+        TokenSource source = TokenSources.build(config(settings), AuthContext.defaults());
+
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            int number = attempt;
+            assertThatThrownBy(() -> source.fetch()
+                            .toCompletableFuture()
+                            .orTimeout(1, TimeUnit.SECONDS)
+                            .join())
+                    .as("fetch %d must report the missing store, not park on a promise nobody completes", number)
+                    .hasMessageContaining("appears-later.p12");
+        }
+
+        Files.copy(onClasspath("keycloak.jks"), store);
+
+        assertThatThrownBy(() -> source.fetch()
+                        .toCompletableFuture()
+                        .orTimeout(5, TimeUnit.SECONDS)
+                        .join())
+                .as("neither cache holds a poisoned slot, so this fetch gets as far as the network")
+                .hasRootCauseInstanceOf(IOException.class)
+                .hasMessageNotContaining("appears-later.p12");
     }
 
     @Test

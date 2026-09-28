@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 import org.neo4j.connectors.driver.auth.oidc.AccessToken;
@@ -102,11 +103,15 @@ public final class TokenEndpointClient {
      * @return a stage completing with the token
      */
     public CompletionStage<AccessToken> requestToken(TokenRequest request) {
-        HTTPRequest sdkRequest = request.toHTTPRequest();
-        URI endpoint = sdkRequest.getURI();
-        return http.get()
-                .sendAsync(toJdk(sdkRequest), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-                .thenApply(response -> toAccessToken(endpoint, response));
+        try {
+            HTTPRequest sdkRequest = request.toHTTPRequest();
+            URI endpoint = sdkRequest.getURI();
+            return http.get()
+                    .sendAsync(toJdk(sdkRequest), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                    .thenApply(response -> toAccessToken(endpoint, response));
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedStage(e);
+        }
     }
 
     private HttpRequest toJdk(HTTPRequest sdkRequest) {

@@ -66,7 +66,7 @@ final class CachingTokenSource implements TokenSource {
     }
 
     private void start(CompletableFuture<AccessToken> claim) {
-        delegate.fetch().whenComplete((token, error) -> {
+        attempt().whenComplete((token, error) -> {
             if (error != null) {
                 cached.compareAndSet(claim, null);
                 claim.completeExceptionally(TokenErrors.unwrap(error));
@@ -74,6 +74,14 @@ final class CachingTokenSource implements TokenSource {
                 claim.complete(token);
             }
         });
+    }
+
+    private CompletionStage<AccessToken> attempt() {
+        try {
+            return delegate.fetch();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedStage(e);
+        }
     }
 
     @Override
