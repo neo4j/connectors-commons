@@ -47,7 +47,8 @@ public class BasicAuthTokenManagerFactory implements AuthTokenManagerFactory {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Authentication scheme 'basic' requires a password but none was configured"));
 
-        AuthToken token = AuthTokens.basic(username, password);
+        String realm = config.get("realm").orElse(null);
+        AuthToken token = AuthTokens.basic(username, password, realm);
         return AuthTokenManagers.basic(() -> token);
     }
 }
