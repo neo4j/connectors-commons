@@ -140,6 +140,9 @@ public class KeycloakOidcIT {
         Map<String, String> settings = new HashMap<>();
         settings.put("profile", "keycloak-it");
         settings.put("issuer", issuer());
+        // Keycloak is reached on the mapped port but advertises its frontend hostname, so the
+        // issuer it puts in the document, and in the tokens, is not the URL fetched from.
+        settings.put("expectedIssuer", "https://keycloak:8443/realms/" + REALM);
         settings.put("clientId", CLIENT_ID);
         settings.put("clientSecret", CLIENT_SECRET);
 
@@ -156,6 +159,9 @@ public class KeycloakOidcIT {
         Map<String, String> settings = new HashMap<>();
         settings.put("profile", "keycloak-it");
         settings.put("issuer", issuer());
+        // Keycloak is reached on the mapped port but advertises its frontend hostname, so the
+        // issuer it puts in the document, and in the tokens, is not the URL fetched from.
+        settings.put("expectedIssuer", "https://keycloak:8443/realms/" + REALM);
         settings.put("clientId", CLIENT_ID);
         settings.put("clientSecret", CLIENT_SECRET);
         settings.put("scope", "openid");
@@ -195,7 +201,10 @@ public class KeycloakOidcIT {
         // Reached over plain HTTP on the mapped port: the container's certificate is issued for the
         // name 'keycloak', which only resolves inside the docker network. The token Keycloak mints
         // still carries the https://keycloak:8443 issuer the Neo4j container is configured to trust.
-        settings.put("issuer", "http://" + KEYCLOAK.getHost() + ":" + KEYCLOAK.getHttpPort() + "/realms/" + REALM);
+        settings.put("issuer", issuer());
+        // Keycloak advertises its frontend hostname, not the address it was reached at, so the
+        // issuer in the document and in the tokens differs from the discovery URL.
+        settings.put("expectedIssuer", "https://keycloak:8443/realms/" + REALM);
         settings.put("grantType", "password");
         settings.put("clientId", CLIENT_ID);
         settings.put("clientSecret", CLIENT_SECRET);

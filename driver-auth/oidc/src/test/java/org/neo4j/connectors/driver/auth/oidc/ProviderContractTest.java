@@ -205,7 +205,7 @@ class ProviderContractTest {
     }
 
     @Test
-    void workloadIdentityExchangesTheProjectedTokenFromTheFile() throws Exception {
+    void tokenExchangeSendsTheSubjectTokenReadFromTheFile() throws Exception {
         Path subjectToken = java.nio.file.Files.writeString(directory.resolve("token"), "projected-token\n");
         Map<String, String> settings = new HashMap<>();
         settings.put("tokenEndpoint", provider.uri("/token").toString());

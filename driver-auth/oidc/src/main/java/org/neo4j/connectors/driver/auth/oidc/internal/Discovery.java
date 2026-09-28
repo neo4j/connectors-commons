@@ -51,6 +51,7 @@ import java.util.function.Supplier;
 public final class Discovery {
     private final Supplier<HttpClient> http;
     private final URI discoveryUrl;
+    private final String expectedIssuer;
     private final Duration requestTimeout;
     private final AtomicReference<CompletableFuture<AuthorizationServerMetadata>> metadata = new AtomicReference<>();
 
@@ -59,11 +60,13 @@ public final class Discovery {
      *
      * @param http supplies the client to fetch with, built on first use
      * @param discoveryUrl the discovery document URL
+     * @param expectedIssuer the issuer the document must advertise, or {@code null} to accept any
      * @param requestTimeout the per-request timeout
      */
-    public Discovery(Supplier<HttpClient> http, URI discoveryUrl, Duration requestTimeout) {
+    public Discovery(Supplier<HttpClient> http, URI discoveryUrl, String expectedIssuer, Duration requestTimeout) {
         this.http = http;
         this.discoveryUrl = discoveryUrl;
+        this.expectedIssuer = expectedIssuer;
         this.requestTimeout = requestTimeout;
     }
 
@@ -125,7 +128,12 @@ public final class Discovery {
     }
 
     private AuthorizationServerMetadata parse(HttpResponse<String> response) {
-        if (response.statusCode() >= 300 || response.statusCode() < 200) {
+        if (response.statusCode() >= 300 && response.statusCode() < 400) {
+            throw new IllegalStateException("The discovery document at " + discoveryUrl + " answered with HTTP "
+                    + response.statusCode() + ". Redirects are not followed, because the endpoints they lead to are"
+                    + " later sent credentials. Configure 'discoveryUrl' or 'tokenEndpoint' with the final URL.");
+        }
+        if (response.statusCode() >= 400 || response.statusCode() < 200) {
             throw TokenErrors.discoveryFailed(
                     discoveryUrl,
                     response.statusCode(),
@@ -135,11 +143,42 @@ public final class Discovery {
                     TokenErrors.retryAfter(response.headers(), Clock.systemUTC())
                             .orElse(null));
         }
+        AuthorizationServerMetadata metadata;
         try {
-            return AuthorizationServerMetadata.parse(response.body());
+            metadata = AuthorizationServerMetadata.parse(response.body());
         } catch (ParseException e) {
             throw new IllegalStateException(
                     "The discovery document at " + discoveryUrl + " could not be read: " + e.getMessage(), e);
         }
+        requireExpectedIssuer(metadata);
+        return metadata;
+    }
+
+    /**
+     * OpenID Connect Discovery section 4.3 and RFC 8414 section 3.3 both require the advertised
+     * issuer to equal the one the discovery URL was built from, and the document to be discarded
+     * otherwise. Without the check a substituted document could name any {@code token_endpoint}, and
+     * this client's secret or signed assertion would be posted to it.
+     */
+    private void requireExpectedIssuer(AuthorizationServerMetadata metadata) {
+        if (expectedIssuer == null) {
+            return;
+        }
+        String advertised =
+                metadata.getIssuer() == null ? null : metadata.getIssuer().getValue();
+        if (!expectedIssuer.equals(withoutTrailingSlash(advertised))) {
+            throw new IllegalStateException("The discovery document at " + discoveryUrl + " advertises issuer '"
+                    + advertised + "', but '" + expectedIssuer + "' was configured. The document is not used,"
+                    + " because its token endpoint would be sent this client's credentials. If the provider is"
+                    + " reached at one address and advertises another, name the advertised one in"
+                    + " 'expectedIssuer'.");
+        }
+    }
+
+    private static String withoutTrailingSlash(String issuer) {
+        if (issuer == null) {
+            return null;
+        }
+        return issuer.endsWith("/") ? issuer.substring(0, issuer.length() - 1) : issuer;
     }
 }

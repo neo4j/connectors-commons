@@ -117,7 +117,11 @@ public final class TokenSources {
                     CompletableFuture.completedStage(config.tokenEndpoint().orElseThrow());
             return () -> configured;
         }
-        Discovery discovery = new Discovery(http, config.discoveryUrl().orElseThrow(), config.requestTimeout());
+        Discovery discovery = new Discovery(
+                http,
+                config.discoveryUrl().orElseThrow(),
+                config.expectedIssuer().orElse(null),
+                config.requestTimeout());
         return discovery::tokenEndpoint;
     }
 
@@ -207,7 +211,7 @@ public final class TokenSources {
         HttpClient.Builder builder = HttpClient.newBuilder()
                 .connectTimeout(config.connectTimeout())
                 .executor(context.executor())
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .sslContext(sslContext(config, context));
         config.proxyHost()
                 .ifPresent(host -> builder.proxy(ProxySelector.of(new InetSocketAddress(host, config.proxyPort()))));

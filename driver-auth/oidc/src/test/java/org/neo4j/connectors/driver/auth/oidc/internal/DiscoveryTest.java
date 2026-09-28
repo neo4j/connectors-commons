@@ -135,8 +135,66 @@ class DiscoveryTest {
                 .hasMessageContaining("issuer");
     }
 
+    @Test
+    void acceptsADocumentThatAdvertisesTheConfiguredIssuer() {
+        provider.on(WELL_KNOWN, TokenEndpointStub.Response.json(DOCUMENT));
+
+        assertThat(discoveryExpecting("https://host")
+                        .tokenEndpoint()
+                        .toCompletableFuture()
+                        .join())
+                .isEqualTo(URI.create("https://host/token"));
+    }
+
+    @Test
+    void ignoresATrailingSlashWhenComparingTheIssuer() {
+        provider.on(
+                WELL_KNOWN,
+                TokenEndpointStub.Response.json(
+                        "{\"issuer\":\"https://host/\",\"token_endpoint\":\"https://host/token\"}"));
+
+        assertThat(discoveryExpecting("https://host")
+                        .tokenEndpoint()
+                        .toCompletableFuture()
+                        .join())
+                .isEqualTo(URI.create("https://host/token"));
+    }
+
+    @Test
+    void refusesADocumentThatAdvertisesADifferentIssuer() {
+        provider.on(
+                WELL_KNOWN,
+                TokenEndpointStub.Response.json(
+                        "{\"issuer\":\"https://attacker\",\"token_endpoint\":\"https://attacker/token\"}"));
+
+        assertThatThrownBy(() -> discoveryExpecting("https://host")
+                        .tokenEndpoint()
+                        .toCompletableFuture()
+                        .join())
+                .hasCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("https://attacker")
+                .hasMessageContaining("https://host");
+    }
+
+    @Test
+    void refusesToFollowARedirectFromTheDiscoveryUrl() {
+        provider.on(
+                WELL_KNOWN,
+                TokenEndpointStub.Response.of(302, "").withHeader("Location", "https://elsewhere/.well-known"));
+
+        assertThatThrownBy(
+                        () -> discovery().tokenEndpoint().toCompletableFuture().join())
+                .hasCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Redirects are not followed");
+    }
+
+    /** No expected issuer: the case where only {@code discoveryUrl} was configured. */
     private Discovery discovery() {
-        return new Discovery(() -> http, provider.uri(WELL_KNOWN), Duration.ofSeconds(5));
+        return discoveryExpecting(null);
+    }
+
+    private Discovery discoveryExpecting(String expectedIssuer) {
+        return new Discovery(() -> http, provider.uri(WELL_KNOWN), expectedIssuer, Duration.ofSeconds(5));
     }
 
     private static void await(CyclicBarrier barrier) {

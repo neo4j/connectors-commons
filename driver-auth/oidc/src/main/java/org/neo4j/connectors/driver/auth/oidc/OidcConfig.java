@@ -40,6 +40,7 @@ import org.neo4j.connectors.driver.auth.oidc.internal.AssertionFactory;
  */
 public final class OidcConfig {
     static final String ISSUER = "issuer";
+    static final String EXPECTED_ISSUER = "expectedIssuer";
     static final String DISCOVERY_URL = "discoveryUrl";
     static final String TOKEN_ENDPOINT = "tokenEndpoint";
     static final String GRANT_TYPE = "grantType";
@@ -75,6 +76,8 @@ public final class OidcConfig {
     private static final String DISCOVERY_SUFFIX = "/.well-known/openid-configuration";
     private static final String DEFAULT_SUBJECT_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:jwt";
 
+    private final String issuer;
+    private final String expectedIssuer;
     private final URI discoveryUrl;
     private final URI tokenEndpoint;
     private final GrantType grantType;
@@ -111,6 +114,10 @@ public final class OidcConfig {
 
     private OidcConfig(AuthConfig config, Settings settings) {
         this.tokenEndpoint = settings.uri(TOKEN_ENDPOINT).orElse(null);
+        this.issuer = settings.uri(ISSUER).map(OidcConfig::withoutTrailingSlash).orElse(null);
+        this.expectedIssuer = settings.uri(EXPECTED_ISSUER)
+                .map(OidcConfig::withoutTrailingSlash)
+                .orElse(issuer);
         this.discoveryUrl = settings.uri(DISCOVERY_URL)
                 .or(() -> settings.uri(ISSUER).map(OidcConfig::discoveryUrlOf))
                 .orElse(null);
@@ -257,8 +264,13 @@ public final class OidcConfig {
     }
 
     private static URI discoveryUrlOf(URI issuer) {
+        return URI.create(withoutTrailingSlash(issuer) + DISCOVERY_SUFFIX);
+    }
+
+    /** The discovery URL is built from this form, so it is also the form the metadata must match. */
+    private static String withoutTrailingSlash(URI issuer) {
         String base = issuer.toString();
-        return URI.create((base.endsWith("/") ? base.substring(0, base.length() - 1) : base) + DISCOVERY_SUFFIX);
+        return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
     }
 
     /**
@@ -268,6 +280,33 @@ public final class OidcConfig {
      */
     public Optional<URI> tokenEndpoint() {
         return Optional.ofNullable(tokenEndpoint);
+    }
+
+    /**
+     * Returns the issuer the user declared, without a trailing slash.
+     *
+     * <p>Kept so that the discovery document can be checked against it. Absent when only
+     * {@code discoveryUrl} or {@code tokenEndpoint} was configured, in which case there is no
+     * declared issuer to check.
+     *
+     * @return the issuer, or {@link Optional#empty()} if none was configured
+     */
+    public Optional<String> issuer() {
+        return Optional.ofNullable(issuer);
+    }
+
+    /**
+     * Returns the issuer the discovery document must advertise.
+     *
+     * <p>The {@code issuer} setting unless {@code expectedIssuer} overrides it. They differ when a
+     * provider is reached at one address and advertises another, which is what a Keycloak behind a
+     * reverse proxy does, and what Entra ID does when addressed by tenant domain rather than by
+     * tenant identifier.
+     *
+     * @return the expected issuer, or {@link Optional#empty()} if neither was configured
+     */
+    public Optional<String> expectedIssuer() {
+        return Optional.ofNullable(expectedIssuer);
     }
 
     /**

@@ -125,7 +125,20 @@ public final class TokenEndpointClient {
 
     private AccessToken toAccessToken(URI endpoint, HttpResponse<String> response) {
         Duration retryAfter = TokenErrors.retryAfter(response.headers(), clock).orElse(null);
-        if (response.statusCode() >= 300 || response.statusCode() < 200) {
+        if (response.statusCode() >= 300 & response.statusCode() < 400) {
+            // Not followed: a 307 or 308 would replay this request, credentials and all, to
+            // whatever host Location names.
+            throw new TokenRequestException(
+                    "The token endpoint " + endpoint + " answered with HTTP " + response.statusCode()
+                            + ". Redirects from a token endpoint are not followed, because the request carries"
+                            + " this client's credentials. Configure 'tokenEndpoint' with the final URL.",
+                    response.statusCode(),
+                    null,
+                    false,
+                    retryAfter,
+                    null);
+        }
+        if (response.statusCode() >= 400 || response.statusCode() < 200) {
             throw TokenErrors.fromResponse(endpoint, response.statusCode(), response.body(), retryAfter);
         }
 

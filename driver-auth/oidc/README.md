@@ -42,7 +42,19 @@ One of the three is required.
 |---------|---------|---------|
 | `issuer` | Base URL. Discovery at `{issuer}/.well-known/openid-configuration`. | - |
 | `discoveryUrl` | The discovery URL, given directly. The document is read as RFC 8414 metadata, so it must carry `issuer` and `token_endpoint`. | derived from `issuer` |
+| `expectedIssuer` | The issuer the discovery document must advertise. Set it only when the provider is reached at one address and advertises another. | `issuer` |
 | `tokenEndpoint` | The token URL, given directly. Skips discovery. | from discovery |
+
+When `issuer` is configured, the discovery document must advertise that same issuer or it is
+refused, as OpenID Connect Discovery requires: otherwise a substituted document could name any
+`token_endpoint`, and this client would post its credentials to it. A provider behind a reverse
+proxy, or a Keycloak whose frontend hostname differs from the address it is reached at,
+legitimately advertises a different value; name that value in `expectedIssuer`. It is the value the
+tokens carry in `iss`, so it should match `dbms.security.oidc.<name>.issuer`.
+
+Redirects are never followed. A `307` or `308` from a token endpoint would replay the request body,
+which carries the client secret, the end user's password or a signed assertion, to whatever host
+`Location` names.
 
 #### How to ask
 
@@ -222,15 +234,27 @@ dbms.security.oidc.cognito.audience        = <client id>
 dbms.security.oidc.cognito.claims.username = username
 ```
 
-#### Workload identity on EKS or GKE
-The platform writes a projected OIDC token into the pod, and
-`token_exchange` swaps it for one the provider issues. The file is re-read on every fetch, so its
-rotation is handled.
+#### Token exchange
+
+The `token_exchange` grant implements RFC 8693: a token you already hold, read from a file, is
+swapped for one the provider issues. The file is re-read on every fetch, so a token the platform
+rotates is picked up.
 
 ```
-issuer           = https://sts.googleapis.com
+issuer           = https://<provider>
 grantType        = token_exchange
 clientAuthMethod = none
 subjectTokenFile = /var/run/secrets/tokens/token
-audience         = //iam.googleapis.com/projects/<n>/locations/global/workloadIdentityPools/<p>/providers/<v>
+audience         = <what the issued token should be addressed to>
 ```
+
+Whether this yields something Neo4j accepts depends on what the provider returns. Neo4j can only
+verify a JWT, so a provider whose exchange returns an opaque token is of no use here even when the
+grant itself works.
+
+**Cloud workload identity is not covered by this.** Google's STS is not an OIDC provider, exposes no
+discovery document, and its exchange returns an opaque access token rather than a JWT; obtaining a
+JWT additionally needs an ID-token issuance call that this module does not implement. On EKS the
+projected file already holds a JWT signed by the cluster's OIDC provider, so if Neo4j trusts that
+issuer the token needs no exchange at all, which is a case this module has no grant for either.
+Neither path has been verified end to end, so neither is documented as supported.

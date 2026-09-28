@@ -84,6 +84,36 @@ class OidcConfigTest {
     }
 
     @Test
+    void expectsTheIssuerItWasGivenUnlessToldOtherwise() {
+        OidcConfig config = parse(Map.of("issuer", "https://host/realms/neo4j/", "clientId", "c", "clientSecret", "s"));
+
+        assertThat(config.expectedIssuer()).contains("https://host/realms/neo4j");
+    }
+
+    @Test
+    void letsTheExpectedIssuerDifferFromTheAddressItIsReachedAt() {
+        OidcConfig config = parse(Map.of(
+                "issuer", "http://localhost:8080/realms/neo4j",
+                "expectedIssuer", "https://keycloak:8443/realms/neo4j",
+                "clientId", "c",
+                "clientSecret", "s"));
+
+        assertThat(config.discoveryUrl())
+                .contains(URI.create("http://localhost:8080/realms/neo4j/.well-known/openid-configuration"));
+        assertThat(config.expectedIssuer()).contains("https://keycloak:8443/realms/neo4j");
+    }
+
+    @Test
+    void expectsNoIssuerWhenOnlyTheDiscoveryUrlIsConfigured() {
+        OidcConfig config = parse(Map.of(
+                "discoveryUrl", "https://host/.well-known/openid-configuration",
+                "clientId", "c",
+                "clientSecret", "s"));
+
+        assertThat(config.expectedIssuer()).isEmpty();
+    }
+
+    @Test
     void appliesTheDocumentedDefaults() {
         OidcConfig config = parse(base());
 
