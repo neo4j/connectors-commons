@@ -16,7 +16,9 @@ Driver driver = GraphDatabase.driver(uri, manager);
 Refreshing is the driver's job. `AuthTokenManagers.bearerAsync` re-invokes the token source once the
 token has expired and when the server answers with `TokenExpiredException` or
 `AuthenticationException`, and de-duplicates concurrent refreshes, so this module runs no timer and
-no background thread.
+no background thread. A rejection is passed back to the token source as well, so a token that the
+server refuses before its expiry, because it was revoked or because the clocks disagree, is dropped
+rather than handed out again.
 
 The OAuth 2.0 protocol itself - grants, client authentication, discovery, signed assertions and
 RFC 6749 error bodies - is handled by [`com.nimbusds:oauth2-oidc-sdk`](https://connect2id.com/products/nimbus-oauth-openid-connect-sdk).

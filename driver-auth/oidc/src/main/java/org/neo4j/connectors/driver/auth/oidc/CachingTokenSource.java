@@ -37,7 +37,9 @@ import org.neo4j.connectors.driver.auth.oidc.internal.TokenErrors;
  *       contention, so it does nothing but choose between two references.
  * </ul>
  *
- * <p>A failed fetch clears the slot so the next caller retries, rather than caching the failure.
+ * <p>A failed fetch clears the slot so the next caller retries, rather than caching the failure. So
+ * does {@link #invalidate()}, which is how a token the server rejected before its expiry is dropped
+ * instead of being served again.
  */
 final class CachingTokenSource implements TokenSource {
     private final TokenSource delegate;
@@ -72,6 +74,13 @@ final class CachingTokenSource implements TokenSource {
                 claim.complete(token);
             }
         });
+    }
+
+    @Override
+    public void invalidate() {
+        // Unconditional: the alternative is comparing the rejected token against the held one, and
+        // re-fetching once too often is cheaper than serving a token the server has refused.
+        cached.set(null);
     }
 
     private boolean isUsable(CompletableFuture<AccessToken> current) {

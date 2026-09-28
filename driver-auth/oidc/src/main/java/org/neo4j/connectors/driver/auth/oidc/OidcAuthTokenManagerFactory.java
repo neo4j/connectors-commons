@@ -37,7 +37,9 @@ import org.neo4j.driver.AuthTokens;
  * token has expired and when the server answers with
  * {@link org.neo4j.driver.exceptions.TokenExpiredException} or
  * {@link org.neo4j.driver.exceptions.AuthenticationException}, and de-duplicates concurrent
- * refreshes. This module therefore runs no timer and no background thread.
+ * refreshes. This module therefore runs no timer and no background thread. A rejection is passed
+ * back to the token source as well, so a token revoked before its expiry is dropped rather than
+ * served again.
  *
  * <p>{@link #create(AuthConfig, AuthContext)} validates the settings and performs no I/O: the
  * discovery lookup, the secret file and the key file are all resolved on the first token fetch.
@@ -57,7 +59,9 @@ public class OidcAuthTokenManagerFactory implements AuthTokenManagerFactory {
     public AuthTokenManager create(AuthConfig config, AuthContext context) {
         OidcConfig parsed = OidcConfig.parse(config, context);
         TokenSource source = TokenSources.build(parsed, context);
-        return AuthTokenManagers.bearerAsync(() -> source.fetch().thenApply(token -> AuthTokens.bearer(token.value())
-                .expiringAt(token.expiresAt().toEpochMilli())));
+        AuthTokenManager delegate =
+                AuthTokenManagers.bearerAsync(() -> source.fetch().thenApply(token -> AuthTokens.bearer(token.value())
+                        .expiringAt(token.expiresAt().toEpochMilli())));
+        return new InvalidatingAuthTokenManager(delegate, source);
     }
 }

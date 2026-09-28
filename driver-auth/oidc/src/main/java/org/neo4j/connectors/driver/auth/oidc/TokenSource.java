@@ -37,4 +37,13 @@ public interface TokenSource {
      * @return a stage completing with the token
      */
     CompletionStage<AccessToken> fetch();
+
+    /**
+     * Discards any held token, so that the next {@link #fetch()} goes back to the provider.
+     *
+     * <p>Called when the server rejects a token that has not expired yet, which happens when it was
+     * revoked, when the account behind it changed, or when the two clocks disagree. Without this a
+     * caching source would keep handing back the rejected token until its own expiry passed.
+     */
+    default void invalidate() {}
 }

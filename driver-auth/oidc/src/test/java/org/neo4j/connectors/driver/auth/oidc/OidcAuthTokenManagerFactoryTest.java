@@ -21,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,8 +29,12 @@ import org.neo4j.connectors.driver.auth.AuthConfig;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.AuthTokenManagerFactory;
 import org.neo4j.connectors.driver.auth.AuthTokenManagerRegistry;
+import org.neo4j.driver.AuthToken;
 import org.neo4j.driver.AuthTokenManager;
 import org.neo4j.driver.AuthTokens;
+import org.neo4j.driver.exceptions.AuthenticationException;
+import org.neo4j.driver.exceptions.SecurityException;
+import org.neo4j.driver.exceptions.TokenExpiredException;
 
 class OidcAuthTokenManagerFactoryTest {
     private final OidcAuthTokenManagerFactory factory = new OidcAuthTokenManagerFactory();
@@ -83,6 +88,55 @@ class OidcAuthTokenManagerFactoryTest {
         manager.getToken().toCompletableFuture().join();
         manager.getToken().toCompletableFuture().join();
 
+        assertThat(provider.requests()).hasSize(1);
+    }
+
+    @Test
+    void refetchesAfterTheServerRejectsATokenThatHasNotExpired() {
+        AtomicInteger issued = new AtomicInteger();
+        provider.on(
+                "/token",
+                request -> TokenEndpointStub.Response.json(
+                        "{\"access_token\":\"token-" + issued.incrementAndGet() + "\",\"expires_in\":3600}"));
+        AuthTokenManager manager = factory.create(AuthConfig.of(null, null, settings()), context());
+        AuthToken first = manager.getToken().toCompletableFuture().join();
+
+        boolean retryable = manager.handleSecurityException(
+                first, new TokenExpiredException("Neo.ClientError.Security.TokenExpired", "revoked"));
+
+        assertThat(retryable).isTrue();
+        assertThat(manager.getToken().toCompletableFuture().join()).isNotEqualTo(first);
+        assertThat(provider.requests()).hasSize(2);
+    }
+
+    @Test
+    void refetchesAfterAnAuthenticationFailureToo() {
+        AtomicInteger issued = new AtomicInteger();
+        provider.on(
+                "/token",
+                request -> TokenEndpointStub.Response.json(
+                        "{\"access_token\":\"token-" + issued.incrementAndGet() + "\",\"expires_in\":3600}"));
+        AuthTokenManager manager = factory.create(AuthConfig.of(null, null, settings()), context());
+        AuthToken first = manager.getToken().toCompletableFuture().join();
+
+        manager.handleSecurityException(
+                first, new AuthenticationException("Neo.ClientError.Security.Unauthorized", "no longer valid"));
+        manager.getToken().toCompletableFuture().join();
+
+        assertThat(provider.requests()).hasSize(2);
+    }
+
+    @Test
+    void keepsTheTokenWhenTheFailureIsNotAboutAuthentication() {
+        provider.on("/token", TokenEndpointStub.Response.json("{\"access_token\":\"a-token\",\"expires_in\":3600}"));
+        AuthTokenManager manager = factory.create(AuthConfig.of(null, null, settings()), context());
+        AuthToken first = manager.getToken().toCompletableFuture().join();
+
+        boolean retryable = manager.handleSecurityException(
+                first, new SecurityException("Neo.ClientError.Security.Forbidden", "not allowed"));
+
+        assertThat(retryable).isFalse();
+        assertThat(manager.getToken().toCompletableFuture().join()).isEqualTo(first);
         assertThat(provider.requests()).hasSize(1);
     }
 
