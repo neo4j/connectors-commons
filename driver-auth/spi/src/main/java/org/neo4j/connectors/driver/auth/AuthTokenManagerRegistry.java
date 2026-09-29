@@ -64,8 +64,11 @@ public final class AuthTokenManagerRegistry {
     /**
      * Creates a registry from the services visible to the given class loader.
      *
+     * <p>The same loader is put on the {@link AuthContext}, so a factory reads its own classpath
+     * resources with the loader the host chose rather than with the calling thread's.
+     *
      * @param loader the class loader to discover services with
-     * @return a new registry using {@link AuthContext#defaults()}
+     * @return a new registry
      */
     public static AuthTokenManagerRegistry using(ClassLoader loader) {
         Objects.requireNonNull(loader, "loader must not be null");
@@ -73,7 +76,7 @@ public final class AuthTokenManagerRegistry {
                 discover(
                         ServiceLoader.load(AuthTokenManagerFactory.class, loader),
                         ServiceLoader.load(AuthenticationTokenSupplierFactory.class, loader)),
-                AuthContext.defaults());
+                AuthContext.builder().classLoader(loader).build());
     }
 
     /**

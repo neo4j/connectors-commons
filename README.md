@@ -12,6 +12,7 @@ be reused across different connectors.
 | `commons-authn-keycloak`       | Java 8   | Keycloak OIDC token supplier.                                                                            |
 | `commons-driver-auth-spi`      | Java 17  | Looks up `org.neo4j.driver.AuthTokenManager` implementations by name, for the Neo4j Java Driver **6.x**. |
 | `commons-driver-auth-provided` | Java 17  | Token managers provided by Neo4j: `basic`, `bearer`, `kerberos`, `custom`, `none`.                       |
+| `commons-driver-auth-oidc`     | Java 17  | One `oidc` token manager for any OAuth 2.0 / OpenID Connect provider, driven by configuration.           |
 | `commons-reauth-driver`        | Java 8   | Wrapper driver that rebuilds the `Driver` on token expiry, for the Neo4j Java Driver **4.4**.            |
 
 The `commons-authn-*` modules are bound to no driver version. The two driver-bound modules target different driver
@@ -44,3 +45,8 @@ key, at the point the manager is created.
 Use `commons-reauth-driver` **only** on driver 4.4 with a Java 8 baseline. It exists because 4.4 cannot re-authenticate
 an open connection, so the whole `Driver` has to be rebuilt when a token expires. Driver 6.x does this natively, which
 makes the module redundant there. Reach for `commons-driver-auth-spi` instead.
+
+## OIDC token manager
+
+`commons-driver-auth-oidc` registers a single token manager under the name **`oidc`** that obtains
+and refreshes bearer tokens from any OAuth 2.0 / OpenID Connect provider. See detailed documentation [here](driver-auth/oidc/README.md). 

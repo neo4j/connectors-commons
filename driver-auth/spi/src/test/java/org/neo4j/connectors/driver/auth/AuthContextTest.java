@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
+import javax.net.ssl.SSLContext;
 import org.junit.jupiter.api.Test;
 
 class AuthContextTest {
@@ -34,6 +35,8 @@ class AuthContextTest {
 
         assertThat(context.executor()).isSameAs(ForkJoinPool.commonPool());
         assertThat(context.clock()).isEqualTo(Clock.systemUTC());
+        assertThat(context.sslContext()).isSameAs(defaultSslContext());
+        assertThat(context.classLoader()).isSameAs(Thread.currentThread().getContextClassLoader());
     }
 
     @Test
@@ -43,6 +46,16 @@ class AuthContextTest {
 
         assertThat(context.executor()).isSameAs(executor);
         assertThat(context.clock()).isEqualTo(Clock.systemUTC());
+        assertThat(context.sslContext()).isSameAs(defaultSslContext());
+    }
+
+    @Test
+    void carriesAnOverriddenSslContext() throws Exception {
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, null, null);
+
+        assertThat(AuthContext.builder().sslContext(sslContext).build().sslContext())
+                .isSameAs(sslContext);
     }
 
     @Test
@@ -53,8 +66,26 @@ class AuthContextTest {
     }
 
     @Test
+    void carriesAnOverriddenClassLoader() {
+        ClassLoader loader = new ClassLoader(null) {};
+
+        assertThat(AuthContext.builder().classLoader(loader).build().classLoader())
+                .isSameAs(loader);
+    }
+
+    @Test
     void rejectsNullCollaborators() {
         assertThatThrownBy(() -> AuthContext.builder().executor(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> AuthContext.builder().clock(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> AuthContext.builder().sslContext(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> AuthContext.builder().classLoader(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    private static SSLContext defaultSslContext() {
+        try {
+            return SSLContext.getDefault();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 }
