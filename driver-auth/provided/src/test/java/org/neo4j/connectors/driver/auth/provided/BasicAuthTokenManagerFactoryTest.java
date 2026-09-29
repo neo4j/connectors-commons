@@ -42,6 +42,15 @@ class BasicAuthTokenManagerFactoryTest {
     }
 
     @Test
+    void createsAManagerForTheConfiguredCredentialsAndRealm() {
+        AuthTokenManager manager =
+                factory.create(AuthConfig.of("neo4j", "secret", Map.of("realm", "neo4jorg")), AuthContext.defaults());
+
+        assertThat(manager.getToken().toCompletableFuture().join())
+                .isEqualTo(AuthTokens.basic("neo4j", "secret", "neo4jorg"));
+    }
+
+    @Test
     void ignoresParametersItDoesNotKnow() {
         AuthTokenManager manager =
                 factory.create(AuthConfig.of("neo4j", "secret", Map.of("token", "a-token")), AuthContext.defaults());
