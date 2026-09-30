@@ -69,7 +69,7 @@ public interface AuthConfig {
      *
      * @param key the parameter name
      * @return the value
-     * @throws IllegalArgumentException if the parameter is absent, naming {@code key}
+     * @throws AuthConfigException if the parameter is absent, naming {@code key}
      */
     String require(String key);
 

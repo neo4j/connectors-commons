@@ -30,6 +30,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.oidc.clientauth.ClientAuthMethod;
 import org.neo4j.connectors.driver.auth.oidc.grant.GrantType;
@@ -113,7 +114,8 @@ class ProfilesTest {
                 bundle("second", "in-house", "tokenEndpoint=https://second/token"));
 
         assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "in-house"), loader))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("profile"))
                 .hasMessageContaining("profile")
                 .hasMessageContaining("2 bundles")
                 .hasMessageContaining("profiles/in-house.properties")
@@ -128,7 +130,8 @@ class ProfilesTest {
                 new URLClassLoader(urlsOf(bundle("mine", "google", "tokenEndpoint=https://mirror/token")), LOADER);
 
         assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "google"), loader))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("profile"))
                 .hasMessageContaining("2 bundles")
                 .hasMessageContaining("profiles/google.properties");
     }
@@ -146,14 +149,16 @@ class ProfilesTest {
         ClassLoader empty = new URLClassLoader(new URL[0], null);
 
         assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "google"), empty))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("profile"))
                 .hasMessageContaining("profiles/google.properties");
     }
 
     @Test
     void reportsAProfileThatIsNotOnTheClasspath() {
         assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "nonesuch"), LOADER))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("profile"))
                 .hasMessageContaining("profile")
                 .hasMessageContaining("profiles/nonesuch.properties");
     }
@@ -161,7 +166,8 @@ class ProfilesTest {
     @Test
     void refusesToTraverseOutOfTheProfileDirectory() {
         assertThatThrownBy(() -> Profiles.merge(Map.of("profile", "../../etc/passwd"), LOADER))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("profile"))
                 .hasMessageContaining("profile");
     }
 

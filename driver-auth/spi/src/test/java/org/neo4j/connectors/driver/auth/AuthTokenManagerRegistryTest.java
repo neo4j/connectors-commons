@@ -18,6 +18,7 @@ package org.neo4j.connectors.driver.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.io.IOException;
 import java.net.URL;
@@ -100,6 +101,50 @@ class AuthTokenManagerRegistryTest {
                 .hasMessageContaining("no-such-scheme")
                 .hasMessageContaining("basic")
                 .hasMessageContaining(TestAuthTokenManagerFactory.NAME);
+    }
+
+    @Test
+    void rejectsAnUnknownNameWhenValidatingJustAsWhenCreating() {
+        AuthTokenManagerRegistry registry = AuthTokenManagerRegistry.usingDefaultClassLoader();
+        AuthConfig config = AuthConfig.of(null, null, Map.of());
+
+        Throwable created = catchThrowable(() -> registry.create("no-such-scheme", config));
+        Throwable validated = catchThrowable(() -> registry.validate("no-such-scheme", config));
+
+        assertThat(validated)
+                .isExactlyInstanceOf(created.getClass())
+                .hasMessage(created.getMessage())
+                .hasMessageContaining("no-such-scheme");
+    }
+
+    @Test
+    void validatesThroughTheNamedFactory(@TempDir Path serviceDirectory) throws IOException {
+        AuthTokenManagerRegistry registry = AuthTokenManagerRegistry.using(
+                classLoaderRegistering(serviceDirectory, ValidatingAuthTokenManagerFactory.class));
+
+        assertThatThrownBy(() ->
+                        registry.validate(ValidatingAuthTokenManagerFactory.NAME, AuthConfig.of(null, null, Map.of())))
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("token"));
+        registry.validate(
+                ValidatingAuthTokenManagerFactory.NAME, AuthConfig.of(null, null, Map.of("token", "a-token")));
+    }
+
+    @Test
+    void acceptsAnythingFromAFactoryThatDoesNotOverrideValidate() {
+        AuthTokenManagerRegistry registry = AuthTokenManagerRegistry.usingDefaultClassLoader();
+
+        registry.validate(TestAuthTokenManagerFactory.NAME, AuthConfig.of(null, null, Map.of()));
+        registry.validate(TestAuthTokenManagerFactory.NAME, AuthConfig.of(null, null, Map.of("anything", "at all")));
+    }
+
+    @Test
+    void acceptsAnythingFromALegacyFactory() {
+        AuthTokenManagerRegistry registry = AuthTokenManagerRegistry.usingDefaultClassLoader();
+        assertThat(registry.find("basic")).containsInstanceOf(LegacyAuthTokenManagerFactory.class);
+
+        // The legacy basic supplier needs a username and a password, but validating must not call it.
+        registry.validate("basic", AuthConfig.of(null, null, Map.of()));
     }
 
     @Test

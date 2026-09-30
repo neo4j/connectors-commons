@@ -39,4 +39,8 @@ final class LegacyAuthTokenManagerFactory implements AuthTokenManagerFactory {
                 config.username().orElse(null), config.password().orElse(null), config.asMap());
         return LegacyAuthBridge.fromSupplier(supplier, context.executor());
     }
+
+    /** Legacy factories only offer a create-style method, which is not safe to call just to validate. */
+    @Override
+    public void validate(AuthConfig config, AuthContext context) {}
 }

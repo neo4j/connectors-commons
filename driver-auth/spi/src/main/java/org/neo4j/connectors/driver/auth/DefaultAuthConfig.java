@@ -18,6 +18,7 @@ package org.neo4j.connectors.driver.auth;
 
 import static java.lang.String.format;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -51,8 +52,8 @@ final class DefaultAuthConfig implements AuthConfig {
     public String require(String key) {
         String value = parameters.get(key);
         if (value == null) {
-            throw new IllegalArgumentException(
-                    format("Authentication parameter '%s' is required but was not configured", key));
+            throw new AuthConfigException(
+                    format("Authentication parameter '%s' is required but was not configured", key), List.of(key));
         }
         return value;
     }
