@@ -18,14 +18,23 @@ package org.neo4j.connectors.driver.auth.oidc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.AuthTokenManagerFactory;
 import org.neo4j.connectors.driver.auth.AuthTokenManagerRegistry;
@@ -157,12 +166,104 @@ class OidcAuthTokenManagerFactoryTest {
         AuthConfig config = AuthConfig.of(null, null, Map.of("issuer", "https://host"));
 
         assertThatThrownBy(() -> factory.create(config, AuthContext.defaults()))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("clientId"))
                 .hasMessageContaining("clientId");
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("configurations")
+    void validateAgreesWithCreate(String description, AuthConfig config) {
+        Throwable created = catchThrowable(() -> factory.create(config, AuthContext.defaults()));
+        Throwable validated = catchThrowable(() -> factory.validate(config, AuthContext.defaults()));
+
+        if (created == null) {
+            assertThat(validated).isNull();
+        } else {
+            assertThat(validated)
+                    .isExactlyInstanceOf(created.getClass())
+                    .isInstanceOf(AuthConfigException.class)
+                    .hasMessage(created.getMessage());
+            assertThat(((AuthConfigException) validated).keys())
+                    .isNotEmpty()
+                    .isEqualTo(((AuthConfigException) created).keys());
+        }
+    }
+
+    static Stream<Arguments> configurations() {
+        return Stream.of(
+                Arguments.of("a valid configuration", config(null, null)),
+                Arguments.of(
+                        "a valid profile",
+                        AuthConfig.of(
+                                null,
+                                null,
+                                Map.of("profile", "google", "clientId", "c", "privateKeyFile", "/does/not/exist"))),
+                Arguments.of("nowhere to get tokens from", AuthConfig.of(null, null, Map.of("clientId", "c"))),
+                Arguments.of("no clientId", AuthConfig.of(null, null, Map.of("issuer", "https://host"))),
+                Arguments.of("an unknown grant", config("grantType", "device_code")),
+                Arguments.of("a malformed URL", config("tokenEndpoint", "not a url")),
+                Arguments.of("an unsupported algorithm", config("privateKeyAlgorithm", "HS256")),
+                Arguments.of("a secret and a secret file", config("clientSecretFile", "/run/secrets/client")),
+                Arguments.of("the password grant without credentials", config("grantType", "password")),
+                Arguments.of("a proxy host without a port", config("proxyHost", "proxy.internal")),
+                Arguments.of("a profile that does not exist", config("profile", "nonesuch")));
+    }
+
+    @Test
+    void validatesWithoutTouchingTheFilesItNamesOrStartingAnHttpClient() {
+        Map<String, String> settings = new HashMap<>();
+        settings.put("tokenEndpoint", provider.uri("/token").toString());
+        settings.put("clientId", "a-client");
+        settings.put("clientAuthMethod", "private_key_jwt");
+        settings.put("privateKeyFile", "/does/not/exist.pem");
+        settings.put("trustStoreFile", "/does/not/exist.p12");
+        Set<Thread> before = Thread.getAllStackTraces().keySet();
+
+        factory.validate(AuthConfig.of(null, null, settings), AuthContext.defaults());
+
+        Set<String> started = Thread.getAllStackTraces().keySet().stream()
+                .filter(thread -> !before.contains(thread))
+                .map(Thread::getName)
+                .collect(Collectors.toSet());
+        assertThat(started).noneMatch(name -> name.contains("HttpClient"));
+        assertThat(provider.requests()).isEmpty();
+    }
+
+    @Test
+    void rejectsAMisconfigurationWhenValidating() {
+        AuthConfig config = AuthConfig.of(null, null, Map.of("issuer", "https://host"));
+
+        assertThatThrownBy(() -> factory.validate(config, AuthContext.defaults()))
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("clientId"))
+                .hasMessageContaining("clientId");
+    }
+
+    @Test
+    void validatesThroughTheRegistry() {
+        AuthTokenManagerRegistry registry = AuthTokenManagerRegistry.usingDefaultClassLoader();
+
+        registry.validate("oidc", AuthConfig.of(null, null, settings()));
+        assertThatThrownBy(() -> registry.validate("oidc", AuthConfig.of(null, null, Map.of("clientId", "c"))))
+                .isInstanceOfSatisfying(AuthConfigException.class, e -> assertThat(e.keys())
+                        .containsExactly("issuer", "discoveryUrl", "tokenEndpoint"));
+    }
+
+    /** A valid configuration that reaches no real endpoint, with one setting changed. */
+    private static AuthConfig config(String key, String value) {
+        Map<String, String> settings = new HashMap<>();
+        settings.put("tokenEndpoint", "https://host/token");
+        settings.put("clientId", "a-client");
+        settings.put("clientSecret", "a-secret");
+        if (key != null) {
+            settings.put(key, value);
+        }
+        return AuthConfig.of(null, null, settings);
+    }
+
     private Map<String, String> settings() {
-        Map<String, String> settings = new java.util.HashMap<>();
+        Map<String, String> settings = new HashMap<>();
         settings.put("tokenEndpoint", provider.uri("/token").toString());
         settings.put("clientId", "a-client");
         settings.put("clientSecret", "a-secret");

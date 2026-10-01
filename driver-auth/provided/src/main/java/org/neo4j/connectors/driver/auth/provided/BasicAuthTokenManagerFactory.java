@@ -16,7 +16,9 @@
  */
 package org.neo4j.connectors.driver.auth.provided;
 
+import java.util.List;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.AuthTokenManagerFactory;
 import org.neo4j.driver.AuthToken;
@@ -40,15 +42,26 @@ public class BasicAuthTokenManagerFactory implements AuthTokenManagerFactory {
 
     @Override
     public AuthTokenManager create(AuthConfig config, AuthContext context) {
+        AuthToken token = token(config);
+        return AuthTokenManagers.basic(() -> token);
+    }
+
+    @Override
+    public void validate(AuthConfig config, AuthContext context) {
+        token(config);
+    }
+
+    private static AuthToken token(AuthConfig config) {
         String username = config.username()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Authentication scheme 'basic' requires a username but none was configured"));
+                .orElseThrow(() -> new AuthConfigException(
+                        "Authentication scheme 'basic' requires a username but none was configured",
+                        List.of("username")));
         String password = config.password()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Authentication scheme 'basic' requires a password but none was configured"));
+                .orElseThrow(() -> new AuthConfigException(
+                        "Authentication scheme 'basic' requires a password but none was configured",
+                        List.of("password")));
 
         String realm = config.get("realm").orElse(null);
-        AuthToken token = AuthTokens.basic(username, password, realm);
-        return AuthTokenManagers.basic(() -> token);
+        return AuthTokens.basic(username, password, realm);
     }
 }

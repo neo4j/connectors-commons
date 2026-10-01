@@ -43,7 +43,16 @@ public class BearerAuthTokenManagerFactory implements AuthTokenManagerFactory {
 
     @Override
     public AuthTokenManager create(AuthConfig config, AuthContext context) {
-        AuthToken token = AuthTokens.bearer(config.require("token"));
+        AuthToken token = token(config);
         return AuthTokenManagers.basic(() -> token);
+    }
+
+    @Override
+    public void validate(AuthConfig config, AuthContext context) {
+        token(config);
+    }
+
+    private static AuthToken token(AuthConfig config) {
+        return AuthTokens.bearer(config.require("token"));
     }
 }

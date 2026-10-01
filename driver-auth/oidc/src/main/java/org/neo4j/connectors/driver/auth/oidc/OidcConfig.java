@@ -19,9 +19,12 @@ package org.neo4j.connectors.driver.auth.oidc;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.connectors.driver.auth.oidc.clientauth.ClientAuthMethod;
 import org.neo4j.connectors.driver.auth.oidc.grant.GrantType;
@@ -34,7 +37,7 @@ import org.neo4j.connectors.driver.auth.oidc.internal.AssertionFactory;
  * grant, how the client proves itself, which extra form fields, which assertion claims. That is what
  * lets Keycloak, Okta, Entra ID, Google and Cognito share one factory.
  *
- * <p>Parsing is eager, so a typo is an {@link IllegalArgumentException} naming the key at the
+ * <p>Parsing is eager, so a typo is an {@link AuthConfigException} naming the key at the
  * moment the connector starts. Nothing here touches the network or reads a credential file. Both
  * are deferred to the first token fetch.
  */
@@ -122,8 +125,10 @@ public final class OidcConfig {
                 .or(() -> settings.uri(ISSUER).map(OidcConfig::discoveryUrlOf))
                 .orElse(null);
         if (tokenEndpoint == null && discoveryUrl == null) {
-            throw new IllegalArgumentException("One of the authentication parameters '" + ISSUER + "', '"
-                    + DISCOVERY_URL + "' or '" + TOKEN_ENDPOINT + "' is required, but none was configured");
+            throw new AuthConfigException(
+                    "One of the authentication parameters '" + ISSUER + "', '" + DISCOVERY_URL + "' or '"
+                            + TOKEN_ENDPOINT + "' is required, but none was configured",
+                    List.of(ISSUER, DISCOVERY_URL, TOKEN_ENDPOINT));
         }
 
         this.grantType = settings.get(GRANT_TYPE)
@@ -187,7 +192,7 @@ public final class OidcConfig {
      * @param config the user-supplied connector configuration
      * @param context the runtime collaborators provided by the host
      * @return the parsed settings
-     * @throws IllegalArgumentException naming the offending key, if anything is missing, malformed or
+     * @throws AuthConfigException naming the offending keys, if anything is missing, malformed or
      *     contradictory
      */
     public static OidcConfig parse(AuthConfig config, AuthContext context) {
@@ -200,7 +205,7 @@ public final class OidcConfig {
      *
      * @param config the user-supplied connector configuration
      * @return the parsed settings
-     * @throws IllegalArgumentException naming the offending key, if anything is missing, malformed or
+     * @throws AuthConfigException naming the offending keys, if anything is missing, malformed or
      *     contradictory
      */
     public static OidcConfig parse(AuthConfig config) {
@@ -214,7 +219,8 @@ public final class OidcConfig {
                     throw Settings.requiredBecause(
                             CLIENT_SECRET,
                             "when " + CLIENT_AUTH_METHOD + " is '" + clientAuthMethod.settingValue() + "' (or use '"
-                                    + CLIENT_SECRET_FILE + "')");
+                                    + CLIENT_SECRET_FILE + "')",
+                            CLIENT_SECRET_FILE);
                 }
             }
             case PRIVATE_KEY_JWT -> requirePrivateKey("when " + CLIENT_AUTH_METHOD + " is 'private_key_jwt'");
@@ -224,9 +230,18 @@ public final class OidcConfig {
         switch (grantType) {
             case PASSWORD -> {
                 if (username == null || password == null) {
-                    throw new IllegalArgumentException("The 'password' grant needs a username and a password, which"
-                            + " come from the connector's own credential settings rather than from the"
-                            + " authentication parameters, but one of them was not configured");
+                    List<String> missing = new ArrayList<>();
+                    if (username == null) {
+                        missing.add("username");
+                    }
+                    if (password == null) {
+                        missing.add("password");
+                    }
+                    throw new AuthConfigException(
+                            "The 'password' grant needs a username and a password, which"
+                                    + " come from the connector's own credential settings rather than from the"
+                                    + " authentication parameters, but one of them was not configured",
+                            missing);
                 }
             }
             case REFRESH_TOKEN -> {
@@ -244,16 +259,19 @@ public final class OidcConfig {
                 if (clientAuthMethod == ClientAuthMethod.NONE) {
                     // RFC 6749 section 4.4.2: the client's own credentials are the whole grant, so
                     // there is nothing left to authorise with once client authentication is off.
-                    throw new IllegalArgumentException("Authentication parameter '" + CLIENT_AUTH_METHOD
-                            + "' cannot be 'none' when '" + GRANT_TYPE
-                            + "' is 'client_credentials': that grant is the client's credentials");
+                    throw new AuthConfigException(
+                            "Authentication parameter '" + CLIENT_AUTH_METHOD + "' cannot be 'none' when '" + GRANT_TYPE
+                                    + "' is 'client_credentials': that grant is the client's credentials",
+                            List.of(CLIENT_AUTH_METHOD, GRANT_TYPE));
                 }
             }
         }
 
         if ((proxyHost == null) != (proxyPort == 0)) {
-            throw new IllegalArgumentException("Authentication parameters '" + PROXY_HOST + "' and '" + PROXY_PORT
-                    + "' must be configured together");
+            throw new AuthConfigException(
+                    "Authentication parameters '" + PROXY_HOST + "' and '" + PROXY_PORT
+                            + "' must be configured together",
+                    List.of(PROXY_HOST, PROXY_PORT));
         }
     }
 

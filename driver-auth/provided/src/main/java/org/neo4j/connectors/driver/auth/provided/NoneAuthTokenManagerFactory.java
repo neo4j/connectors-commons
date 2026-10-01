@@ -37,4 +37,8 @@ public class NoneAuthTokenManagerFactory implements AuthTokenManagerFactory {
     public AuthTokenManager create(AuthConfig config, AuthContext context) {
         return AuthTokenManagers.basic(AuthTokens::none);
     }
+
+    /** There is nothing to check: this scheme reads no configuration. */
+    @Override
+    public void validate(AuthConfig config, AuthContext context) {}
 }

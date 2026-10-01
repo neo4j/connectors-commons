@@ -17,12 +17,20 @@
 package org.neo4j.connectors.driver.auth.provided;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
+import org.neo4j.connectors.driver.auth.AuthContext;
+import org.neo4j.connectors.driver.auth.AuthTokenManagerFactory;
 import org.neo4j.connectors.driver.auth.AuthTokenManagerRegistry;
 
 /**
@@ -63,6 +71,45 @@ class ProvidedAuthTokenManagerFactoriesTest {
                         .toCompletableFuture()
                         .join())
                 .isNotNull();
+    }
+
+    @ParameterizedTest(name = "{0} with {1}")
+    @MethodSource("factoriesAndConfigs")
+    void validateAgreesWithCreate(String name, String description, AuthConfig config) {
+        AuthTokenManagerFactory factory =
+                AuthTokenManagerRegistry.usingDefaultClassLoader().find(name).orElseThrow();
+
+        Throwable created = catchThrowable(() -> factory.create(config, AuthContext.defaults()));
+        Throwable validated = catchThrowable(() -> factory.validate(config, AuthContext.defaults()));
+
+        if (created == null) {
+            assertThat(validated).isNull();
+        } else {
+            assertThat(validated)
+                    .isExactlyInstanceOf(created.getClass())
+                    .isInstanceOf(AuthConfigException.class)
+                    .hasMessage(created.getMessage());
+            assertThat(((AuthConfigException) validated).keys())
+                    .isNotEmpty()
+                    .isEqualTo(((AuthConfigException) created).keys());
+        }
+    }
+
+    static Stream<Arguments> factoriesAndConfigs() {
+        Map<String, AuthConfig> configs = Map.of(
+                "nothing", AuthConfig.of(null, null, null),
+                "everything", fullyPopulatedConfig(),
+                "no password", AuthConfig.of("neo4j", null, Map.of()),
+                "no username", AuthConfig.of(null, "secret", Map.of()),
+                "a token", AuthConfig.of(null, null, Map.of("token", "a-token")),
+                "a ticket", AuthConfig.of(null, null, Map.of("ticket", "a-ticket")),
+                "no principal", AuthConfig.of(null, null, Map.of("credentials", "a-credential", "scheme", "a-scheme")),
+                "no credentials", AuthConfig.of(null, null, Map.of("principal", "a-principal", "scheme", "a-scheme")),
+                "no scheme",
+                        AuthConfig.of(null, null, Map.of("principal", "a-principal", "credentials", "a-credential")));
+        return List.of("basic", "bearer", "custom", "kerberos", "none").stream()
+                .flatMap(name -> configs.entrySet().stream()
+                        .map(config -> Arguments.of(name, config.getKey(), config.getValue())));
     }
 
     /**

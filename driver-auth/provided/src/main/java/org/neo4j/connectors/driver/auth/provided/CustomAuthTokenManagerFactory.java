@@ -40,11 +40,20 @@ public class CustomAuthTokenManagerFactory implements AuthTokenManagerFactory {
 
     @Override
     public AuthTokenManager create(AuthConfig config, AuthContext context) {
-        AuthToken token = AuthTokens.custom(
+        AuthToken token = token(config);
+        return AuthTokenManagers.basic(() -> token);
+    }
+
+    @Override
+    public void validate(AuthConfig config, AuthContext context) {
+        token(config);
+    }
+
+    private static AuthToken token(AuthConfig config) {
+        return AuthTokens.custom(
                 config.require("principal"),
                 config.require("credentials"),
                 config.get("realm").orElse(null),
                 config.require("scheme"));
-        return AuthTokenManagers.basic(() -> token);
     }
 }

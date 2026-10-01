@@ -28,6 +28,7 @@ import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.oidc.Keys;
 
 class AssertionFactoryTest {
@@ -136,7 +137,8 @@ class AssertionFactoryTest {
     @Test
     void rejectsAnAlgorithmItCannotSignWith() {
         assertThatThrownBy(() -> AssertionFactory.algorithmOf("HS256"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("privateKeyAlgorithm"))
                 .hasMessageContaining("privateKeyAlgorithm")
                 .hasMessageContaining("HS256")
                 .hasMessageContaining("RS256");

@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.driver.AuthTokenManager;
 import org.neo4j.driver.AuthTokens;
@@ -64,7 +65,8 @@ class CustomAuthTokenManagerFactoryTest {
         AuthConfig config = AuthConfig.of(null, null, parameters);
 
         assertThatThrownBy(() -> factory.create(config, AuthContext.defaults()))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly(missing))
                 .hasMessageContaining(missing);
     }
 

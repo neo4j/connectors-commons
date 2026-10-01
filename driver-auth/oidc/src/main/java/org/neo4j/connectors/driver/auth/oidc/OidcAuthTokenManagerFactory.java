@@ -43,6 +43,8 @@ import org.neo4j.driver.AuthTokens;
  *
  * <p>{@link #create(AuthConfig, AuthContext)} validates the settings and performs no I/O: the
  * discovery lookup, the secret file and the key file are all resolved on the first token fetch.
+ * {@link #validate(AuthConfig, AuthContext)} runs the same parsing and stops there, so it builds no
+ * token source and no HTTP client at all.
  *
  * <p>Note that this is not a way to authenticate with AWS IAM. Cognito is an ordinary OIDC provider
  * and works here; workload identity on EKS works through {@code token_exchange} and
@@ -63,5 +65,15 @@ public class OidcAuthTokenManagerFactory implements AuthTokenManagerFactory {
                 AuthTokenManagers.bearerAsync(() -> source.fetch().thenApply(token -> AuthTokens.bearer(token.value())
                         .expiringAt(token.expiresAt().toEpochMilli())));
         return new InvalidatingAuthTokenManager(delegate, source);
+    }
+
+    /**
+     * Parses the settings, including any profile bundle, without reading {@code trustStoreFile},
+     * {@code privateKeyFile}, {@code clientSecretFile} or {@code subjectTokenFile}, and without
+     * contacting the provider.
+     */
+    @Override
+    public void validate(AuthConfig config, AuthContext context) {
+        OidcConfig.parse(config, context);
     }
 }

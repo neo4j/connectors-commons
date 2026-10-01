@@ -56,7 +56,8 @@ class AuthConfigTest {
         AuthConfig config = AuthConfig.of(null, null, Map.of());
 
         assertThatThrownBy(() -> config.require("client-secret"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("client-secret"))
                 .hasMessageContaining("client-secret");
     }
 

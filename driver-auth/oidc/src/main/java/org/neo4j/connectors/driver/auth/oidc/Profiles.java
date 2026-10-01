@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 
 /**
  * Loads a bundle of default settings from the classpath and puts it <em>underneath</em> the user's.
@@ -54,7 +55,7 @@ final class Profiles {
      * @param settings the user's settings
      * @param loader the class loader to read the bundle with
      * @return the merged settings, or {@code settings} itself when no profile is named
-     * @throws IllegalArgumentException if the named bundle is not on the classpath
+     * @throws AuthConfigException if the named bundle is not on the classpath
      */
     static Map<String, String> merge(Map<String, String> settings, ClassLoader loader) {
         String name = settings.get(PROFILE);
@@ -89,16 +90,21 @@ final class Profiles {
         String resource = "profiles/" + name + ".properties";
         List<URL> found = locate(resource, loader);
         if (found.isEmpty()) {
-            throw new IllegalArgumentException("Authentication parameter '" + PROFILE + "' names '" + name
-                    + "', but no '" + resource + "' was found on the classpath");
+            throw new AuthConfigException(
+                    "Authentication parameter '" + PROFILE + "' names '" + name + "', but no '" + resource
+                            + "' was found on the classpath",
+                    List.of(PROFILE));
         }
         if (found.size() > 1) {
             // Which copy a class loader hands back depends on search order and on whether delegation
             // is parent first, neither of which the user controls in a connector runtime. Sourcing
             // tokens from whichever endpoint happened to win is worse than refusing to start.
-            throw new IllegalArgumentException("Authentication parameter '" + PROFILE + "' names '" + name
-                    + "', but the classpath holds " + found.size() + " bundles called '" + resource + "': " + found
-                    + ". Only one of them would be used, and which one is not predictable, so rename all but one.");
+            throw new AuthConfigException(
+                    "Authentication parameter '" + PROFILE + "' names '" + name + "', but the classpath holds "
+                            + found.size() + " bundles called '" + resource + "': " + found
+                            + ". Only one of them would be used, and which one is not predictable, so rename all"
+                            + " but one.",
+                    List.of(PROFILE));
         }
         Properties properties = new Properties();
         try (InputStream stream = found.get(0).openStream()) {

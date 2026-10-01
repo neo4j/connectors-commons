@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.oidc.clientauth.ClientAuthMethod;
 import org.neo4j.connectors.driver.auth.oidc.grant.GrantType;
 
@@ -62,7 +63,8 @@ class OidcConfigTest {
     @Test
     void rejectsAConfigurationWithNowhereToGetTokensFrom() {
         assertThatThrownBy(() -> parse(Map.of("clientId", "c", "clientSecret", "s")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(AuthConfigException.class, e -> assertThat(e.keys())
+                        .containsExactly("issuer", "discoveryUrl", "tokenEndpoint"))
                 .hasMessageContaining("issuer")
                 .hasMessageContaining("discoveryUrl")
                 .hasMessageContaining("tokenEndpoint");
@@ -71,14 +73,16 @@ class OidcConfigTest {
     @Test
     void rejectsAMalformedUrl() {
         assertThatThrownBy(() -> parse(Map.of("issuer", "not a url", "clientId", "c", "clientSecret", "s")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("issuer"))
                 .hasMessageContaining("issuer");
     }
 
     @Test
     void rejectsARelativeUrl() {
         assertThatThrownBy(() -> parse(Map.of("tokenEndpoint", "/token", "clientId", "c", "clientSecret", "s")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("tokenEndpoint"))
                 .hasMessageContaining("tokenEndpoint")
                 .hasMessageContaining("absolute");
     }
@@ -140,7 +144,8 @@ class OidcConfigTest {
     @Test
     void rejectsAnUnknownGrant() {
         assertThatThrownBy(() -> parse(with("grantType", "device_code")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("grantType"))
                 .hasMessageContaining("grantType")
                 .hasMessageContaining("device_code")
                 .hasMessageContaining("client_credentials");
@@ -149,7 +154,8 @@ class OidcConfigTest {
     @Test
     void rejectsAnUnknownClientAuthenticationMethod() {
         assertThatThrownBy(() -> parse(with("clientAuthMethod", "mtls")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("clientAuthMethod"))
                 .hasMessageContaining("clientAuthMethod")
                 .hasMessageContaining("private_key_jwt");
     }
@@ -157,7 +163,8 @@ class OidcConfigTest {
     @Test
     void rejectsAnUnsupportedSigningAlgorithm() {
         assertThatThrownBy(() -> parse(with("privateKeyAlgorithm", "HS256")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("privateKeyAlgorithm"))
                 .hasMessageContaining("privateKeyAlgorithm")
                 .hasMessageContaining("RS256");
     }
@@ -165,7 +172,8 @@ class OidcConfigTest {
     @Test
     void requiresAClientIdUnlessTheClientDoesNotAuthenticate() {
         assertThatThrownBy(() -> parse(Map.of("tokenEndpoint", "https://host/token", "clientSecret", "s")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("clientId"))
                 .hasMessageContaining("clientId");
 
         OidcConfig config = parse(Map.of(
@@ -179,7 +187,8 @@ class OidcConfigTest {
     @Test
     void rejectsClientCredentialsWithoutClientAuthentication() {
         assertThatThrownBy(() -> parse(Map.of("tokenEndpoint", "https://host/token", "clientAuthMethod", "none")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(AuthConfigException.class, e -> assertThat(e.keys())
+                        .containsExactly("clientAuthMethod", "grantType"))
                 .hasMessageContaining("clientAuthMethod")
                 .hasMessageContaining("client_credentials");
     }
@@ -187,7 +196,8 @@ class OidcConfigTest {
     @Test
     void requiresASecretForTheSecretBasedMethods() {
         assertThatThrownBy(() -> parse(Map.of("tokenEndpoint", "https://host/token", "clientId", "c")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(AuthConfigException.class, e -> assertThat(e.keys())
+                        .containsExactly("clientSecret", "clientSecretFile"))
                 .hasMessageContaining("clientSecret")
                 .hasMessageContaining("clientSecretFile");
     }
@@ -210,7 +220,8 @@ class OidcConfigTest {
                         "clientId", "c",
                         "clientSecret", "s",
                         "clientSecretFile", "/run/secrets/client")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(AuthConfigException.class, e -> assertThat(e.keys())
+                        .containsExactly("clientSecret", "clientSecretFile"))
                 .hasMessageContaining("clientSecret")
                 .hasMessageContaining("clientSecretFile")
                 .hasMessageContaining("mutually exclusive");
@@ -222,7 +233,8 @@ class OidcConfigTest {
                         "tokenEndpoint", "https://host/token",
                         "clientId", "c",
                         "clientAuthMethod", "private_key_jwt")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("privateKeyFile"))
                 .hasMessageContaining("privateKeyFile")
                 .hasMessageContaining("private_key_jwt");
     }
@@ -233,7 +245,8 @@ class OidcConfigTest {
                         "tokenEndpoint", "https://host/token",
                         "clientAuthMethod", "none",
                         "grantType", "jwt_bearer")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("privateKeyFile"))
                 .hasMessageContaining("privateKeyFile")
                 .hasMessageContaining("jwt_bearer");
     }
@@ -243,7 +256,8 @@ class OidcConfigTest {
         Map<String, String> settings = with("grantType", "password");
 
         assertThatThrownBy(() -> OidcConfig.parse(AuthConfig.of(null, null, settings)))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("username", "password"))
                 .hasMessageContaining("username")
                 .hasMessageContaining("password");
     }
@@ -259,21 +273,24 @@ class OidcConfigTest {
     @Test
     void requiresARefreshTokenForTheRefreshTokenGrant() {
         assertThatThrownBy(() -> parse(with("grantType", "refresh_token")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("refreshToken"))
                 .hasMessageContaining("refreshToken");
     }
 
     @Test
     void requiresASubjectTokenFileForTokenExchange() {
         assertThatThrownBy(() -> parse(with("grantType", "token_exchange")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("subjectTokenFile"))
                 .hasMessageContaining("subjectTokenFile");
     }
 
     @Test
     void requiresTheProxyHostAndPortTogether() {
         assertThatThrownBy(() -> parse(with("proxyHost", "proxy.internal")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("proxyHost", "proxyPort"))
                 .hasMessageContaining("proxyHost")
                 .hasMessageContaining("proxyPort");
     }
@@ -298,7 +315,8 @@ class OidcConfigTest {
     @Test
     void rejectsANonNumericTimeout() {
         assertThatThrownBy(() -> parse(with("requestTimeoutMs", "soon")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("requestTimeoutMs"))
                 .hasMessageContaining("requestTimeoutMs")
                 .hasMessageContaining("integer");
     }
@@ -306,7 +324,8 @@ class OidcConfigTest {
     @Test
     void rejectsANegativeRetryCount() {
         assertThatThrownBy(() -> parse(with("maxRetries", "-1")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("maxRetries"))
                 .hasMessageContaining("maxRetries");
     }
 

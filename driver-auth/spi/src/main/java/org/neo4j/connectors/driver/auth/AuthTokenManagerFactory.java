@@ -40,6 +40,21 @@ public interface AuthTokenManagerFactory {
      * @param config the user-supplied connector configuration
      * @param context the runtime collaborators provided by the host
      * @return a new token manager
+     * @throws AuthConfigException if the configuration is invalid
      */
     AuthTokenManager create(AuthConfig config, AuthContext context);
+
+    /**
+     * Checks the configuration without creating a token manager. Must not open threads, sockets or
+     * files, contact the identity provider, or keep anything reachable after it returns.
+     *
+     * <p>{@link #create(AuthConfig, AuthContext)} must reject everything this rejects, with the same
+     * exception. The default accepts anything: calling {@code create} instead would not be safe, since
+     * a token manager cannot be released.
+     *
+     * @param config the user-supplied connector configuration
+     * @param context the runtime collaborators provided by the host
+     * @throws AuthConfigException if the configuration is invalid
+     */
+    default void validate(AuthConfig config, AuthContext context) {}
 }

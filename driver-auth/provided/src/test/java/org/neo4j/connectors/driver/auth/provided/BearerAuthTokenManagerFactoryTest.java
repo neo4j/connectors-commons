@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.neo4j.connectors.driver.auth.AuthConfig;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 import org.neo4j.connectors.driver.auth.AuthContext;
 import org.neo4j.driver.AuthTokenManager;
 import org.neo4j.driver.AuthTokens;
@@ -56,7 +57,8 @@ class BearerAuthTokenManagerFactoryTest {
         AuthConfig config = AuthConfig.of(null, null, Map.of());
 
         assertThatThrownBy(() -> factory.create(config, AuthContext.defaults()))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(
+                        AuthConfigException.class, e -> assertThat(e.keys()).containsExactly("token"))
                 .hasMessageContaining("token");
     }
 }

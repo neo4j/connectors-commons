@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 
 /**
  * Assembles the claims of a signed assertion and signs it with nimbus-jose-jwt.
@@ -95,12 +96,14 @@ public final class AssertionFactory {
      *
      * @param algorithm the configured value of {@code privateKeyAlgorithm}
      * @return the parsed algorithm
-     * @throws IllegalArgumentException naming the setting, if it is not supported
+     * @throws AuthConfigException naming the setting, if it is not supported
      */
     public static JWSAlgorithm algorithmOf(String algorithm) {
         if (!SUPPORTED.contains(algorithm)) {
-            throw new IllegalArgumentException("Authentication parameter 'privateKeyAlgorithm' has invalid value '"
-                    + algorithm + "'; expected one of " + supportedAlgorithms());
+            throw new AuthConfigException(
+                    "Authentication parameter 'privateKeyAlgorithm' has invalid value '" + algorithm
+                            + "'; expected one of " + supportedAlgorithms(),
+                    List.of("privateKeyAlgorithm"));
         }
         return JWSAlgorithm.parse(algorithm);
     }

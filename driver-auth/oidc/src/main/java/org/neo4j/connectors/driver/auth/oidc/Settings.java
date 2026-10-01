@@ -23,10 +23,13 @@ import java.net.URISyntaxException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import org.neo4j.connectors.driver.auth.AuthConfigException;
 
 /**
  * Typed reads over the raw settings map, each failure naming the key that caused it.
@@ -123,24 +126,34 @@ final class Settings {
         return new LinkedHashMap<>(collected);
     }
 
-    static IllegalArgumentException required(String key) {
-        return new IllegalArgumentException(
-                format("Authentication parameter '%s' is required but was not configured", key));
+    static AuthConfigException required(String key) {
+        return new AuthConfigException(
+                format("Authentication parameter '%s' is required but was not configured", key), List.of(key));
     }
 
-    static IllegalArgumentException requiredBecause(String key, String reason) {
-        return new IllegalArgumentException(
-                format("Authentication parameter '%s' is required %s but was not configured", key, reason));
+    /**
+     * @param alternatives keys that would satisfy the requirement just as well, reported alongside
+     *     {@code key}; the reason is expected to mention them
+     */
+    static AuthConfigException requiredBecause(String key, String reason, String... alternatives) {
+        List<String> keys = new ArrayList<>();
+        keys.add(key);
+        keys.addAll(List.of(alternatives));
+        return new AuthConfigException(
+                format("Authentication parameter '%s' is required %s but was not configured", key, reason), keys);
     }
 
-    static IllegalArgumentException invalid(String key, String value, String expected) {
-        return new IllegalArgumentException(
-                format("Authentication parameter '%s' has invalid value '%s'; expected %s", key, value, expected));
+    static AuthConfigException invalid(String key, String value, String expected) {
+        return new AuthConfigException(
+                format("Authentication parameter '%s' has invalid value '%s'; expected %s", key, value, expected),
+                List.of(key));
     }
 
-    static IllegalArgumentException conflict(String first, String second) {
-        return new IllegalArgumentException(format(
-                "Authentication parameters '%s' and '%s' are mutually exclusive but both were configured",
-                first, second));
+    static AuthConfigException conflict(String first, String second) {
+        return new AuthConfigException(
+                format(
+                        "Authentication parameters '%s' and '%s' are mutually exclusive but both were configured",
+                        first, second),
+                List.of(first, second));
     }
 }

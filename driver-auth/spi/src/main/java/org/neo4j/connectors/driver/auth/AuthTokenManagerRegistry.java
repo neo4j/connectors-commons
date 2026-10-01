@@ -117,13 +117,33 @@ public final class AuthTokenManagerRegistry {
      * @return a new token manager
      * @throws IllegalArgumentException if no factory is registered under that name, listing the names
      *     that are
+     * @throws AuthConfigException if the configuration is invalid
      */
     public AuthTokenManager create(String name, AuthConfig config) {
+        return require(name).create(config, context);
+    }
+
+    /**
+     * Checks a configuration against the factory registered under a name, without creating a token
+     * manager.
+     *
+     * <p>A factory that does not override {@link AuthTokenManagerFactory#validate} accepts anything.
+     *
+     * @param name the scheme name
+     * @param config the user-supplied connector configuration
+     * @throws IllegalArgumentException if no factory is registered under that name, listing the names
+     *     that are
+     * @throws AuthConfigException if the configuration is invalid
+     */
+    public void validate(String name, AuthConfig config) {
+        require(name).validate(config, context);
+    }
+
+    private AuthTokenManagerFactory require(String name) {
         return find(name)
                 .orElseThrow(() -> new IllegalArgumentException(format(
                         "No authentication token manager is registered under the name '%s', available names are %s",
-                        name, names())))
-                .create(config, context);
+                        name, names())));
     }
 
     /**
