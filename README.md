@@ -3,6 +3,13 @@
 This repository contains the source code for the connectors commons project, which provides a set of reusable modules to
 be reused across different connectors.
 
+> [!WARNING]
+> These are INTERNAL libraries for official Neo4j connectors. No guarantees are made regarding its API
+stability and support.
+>
+> The only exception are the SPI modules, `commons-authn-spi` and `commons-driver-auth-spi`, which preserve backward
+> compatibility.
+
 ## Modules
 
 | Module                         | Baseline | Purpose                                                                                                  |
@@ -49,4 +56,24 @@ makes the module redundant there. Reach for `commons-driver-auth-spi` instead.
 ## OIDC token manager
 
 `commons-driver-auth-oidc` registers a single token manager under the name **`oidc`** that obtains
-and refreshes bearer tokens from any OAuth 2.0 / OpenID Connect provider. See detailed documentation [here](driver-auth/oidc/README.md). 
+and refreshes bearer tokens from any OAuth 2.0 / OpenID Connect provider. See detailed documentation [here](driver-auth/oidc/README.md).
+
+## Development & Contributions
+
+### Build locally
+
+You can build and package the project modules using:
+
+```
+mvn clean verify
+```
+
+### Code Format
+
+For Java code, we follow the Palantir Java format code style, enforced by spotless plugin.
+Remember that your builds will fail if your changes doesn't match the enforced code style, but you can
+use `./mvnw spotless:apply` to format your code.
+
+For POM files, we are using [sortpom](https://github.com/Ekryd/sortpom) to have a tidier project object model. Remember
+that your builds will fail if your changes doesn't conform to the enforced rules, but you can use `./mvnw sortpom:sort`
+to format it accordingly.
