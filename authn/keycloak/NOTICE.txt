@@ -1,0 +1,37 @@
+Copyright (c) "Neo4j"
+Neo4j Sweden AB [https://neo4j.com]
+
+This file is part of Neo4j.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Full license texts are found in LICENSES.txt.
+
+
+Third-party licenses
+--------------------
+
+Apache Software License, Version 2.0
+  Apache Commons Codec
+  Apache HttpClient
+  Apache HttpCore
+  Commons Logging to JBoss Logging
+  commons-authn-spi
+  Jackson datatype: jdk8
+  Jackson datatype: JSR310
+  Jackson-annotations
+  Jackson-core
+  jackson-databind
+  Jackson-jr: Objects (main)
+  JBoss Logging 3
+  Keycloak Authz: Client API
+  Keycloak Client Common Synced
+  MicroProfile OpenAPI API
+
