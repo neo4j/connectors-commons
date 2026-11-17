@@ -46,7 +46,7 @@
         <jackson.version>2.22.4</jackson.version>
         <jboss-logging.version>3.6.3.Final</jboss-logging.version>
         <junit-bom.version>5.14.4</junit-bom.version>
-        <keycloak.version>26.0.12</keycloak.version>
+        <keycloak.version>26.0.13</keycloak.version>
         <license-maven-plugin.version>5.1.2</license-maven-plugin.version>
         <license.id>neo4j_apache_v2</license.id>
         <licensing-maven-plugin.version>1.7.12</licensing-maven-plugin.version>
